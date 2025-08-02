@@ -252,9 +252,9 @@ with tab2:
 
     st.subheader("Upload Bend Test Data")
     bend_files = st.file_uploader("Upload CSV files from bend test machine",
-                                    type=["csv"],
-                                    accept_multiple_files=True,
-                                    help="Should contain force measurements in column 1 (kN)")
+                                     type=["csv"],
+                                     accept_multiple_files=True,
+                                     help="Should contain force measurements in column 1 (kN)")
 
     if bend_files:
         # Initialize lists to store results for summary table
@@ -278,30 +278,29 @@ with tab2:
 
                 # Read CSV, specifying column names to match the file structure
                 df = pd.read_csv(bend_file,
-                                    names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
-                                    index_col=False)
+                                     names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
+                                     index_col=False)
                 
-                # --- START OF CORRECTED CODE ---
+                # --- START OF CORRECTED CODE with Rolling Average ---
                 
-                # The raw data has a large negative spike at the beginning. 
-                # We need to find the point where the actual test begins, i.e.,
-                # where the force values are near zero and then start to increase.
-                # A robust way is to find the first index where force is close to zero
-                # and then find the max force from that point onwards.
-                
-                # Use the 'y_axis_measure' column as it represents the positive force values
-                # Find the first index where the force is below a small threshold (e.g., 1.0 kN)
+                # The raw data has a large negative spike at the beginning.
+                # Find the point where the actual test begins, where force values are near zero.
                 start_of_test_index = df[df['y_axis_measure'].abs() < 1.0].first_valid_index()
                 
                 if start_of_test_index is None:
-                    # If no low values are found, assume the test starts at the beginning
                     start_of_test_index = 0
                 else:
-                    # To be safe, skip a few more rows after the first low value
-                    start_of_test_index += 5 
-
-                # Calculate max force from the start of the test onwards
-                max_force_kn = df['y_axis_measure'].iloc[start_of_test_index:].max()
+                    # Skip a few more rows after the first low value to be safe.
+                    start_of_test_index += 5
+                
+                # Apply a rolling average to smooth the data from the start of the test onwards.
+                # This helps to filter out noise and find the 'true' peak of the force curve.
+                smoothed_force = df['y_axis_measure'].iloc[start_of_test_index:].rolling(window=5, min_periods=1).mean()
+                
+                # The maximum value of the smoothed data is the peak force in kilonewtons.
+                max_force_kn = smoothed_force.max()
+                
+                # --- END OF CORRECTED CODE ---
                 
                 # If max_force_kn is still very low or nan, fall back to a simpler method
                 if pd.isna(max_force_kn) or max_force_kn < 0.001:
@@ -313,8 +312,6 @@ with tab2:
                 # Calculate bending strength: σ = (3FL)/(2bh²)
                 bending_strength_nmm2 = (3 * max_force_n * support_span) / (2 * width * height**2)
                 bending_strength_ncm2 = bending_strength_nmm2 * 100
-
-                # --- END OF CORRECTED CODE ---
                 
                 status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
 
@@ -336,20 +333,19 @@ with tab2:
                 col1.metric("Maximum Force", f"{max_force_n:.2f} N")
                 col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
                 col3.metric("Quality Status", status,
-                                delta=f"Target: 260 N/cm²",
-                                delta_color="normal")
+                            delta=f"Target: 260 N/cm²",
+                            delta_color="normal")
 
                 # Create dual-axis plot for force and stress progression
-                # You'll need to define force_n and stress_ncm2 to be able to plot this
-                # I've added the definitions for these above.
                 fig, ax1 = plt.subplots(figsize=(10, 6))
 
                 # Force plot (left axis)
                 color = 'tab:blue'
                 ax1.set_xlabel('Time (s)')
                 ax1.set_ylabel('Force (N)', color=color)
-                ax1.plot(df['time'], df['y_axis_measure'] * 1000, color=color, label='Force')
-                ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Force')
+                # Plotting the smoothed force data
+                ax1.plot(df['time'].iloc[start_of_test_index:], smoothed_force * 1000, color=color, label='Smoothed Force')
+                ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Smoothed Force')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True)
 
@@ -358,9 +354,9 @@ with tab2:
                 color = 'tab:red'
                 ax2.set_ylabel('Stress (N/cm²)', color=color)
                 
-                # Recalculate stress for the plot using the new force data
-                df['stress_ncm2'] = ((3 * (df['y_axis_measure'] * 1000) * support_span) / (2 * width * height**2)) * 100
-                ax2.plot(df['time'], df['stress_ncm2'], color=color, label='Stress')
+                # Recalculate stress for the plot using the smoothed force data
+                smoothed_stress_ncm2 = ((3 * (smoothed_force * 1000) * support_span) / (2 * width * height**2)) * 100
+                ax2.plot(df['time'].iloc[start_of_test_index:], smoothed_stress_ncm2, color=color, label='Smoothed Stress')
                 ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
                 ax2.tick_params(axis='y', labelcolor=color)
 
