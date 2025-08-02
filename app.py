@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -164,25 +163,25 @@ with tab1:
         
         with col1:
             x_measured = st.number_input("X-Dimension (Length)", 
-                                        min_value=150.0,
-                                        max_value=190.0,
-                                        value=172.0,
-                                        step=0.1,
-                                        format="%.1f")
+                                         min_value=150.0,
+                                         max_value=190.0,
+                                         value=172.0,
+                                         step=0.1,
+                                         format="%.1f")
         with col2:
             y_measured = st.number_input("Y-Dimension (Width)", 
-                                        min_value=15.0,
-                                        max_value=30.0,
-                                        value=22.4,
-                                        step=0.1,
-                                        format="%.1f")
+                                         min_value=15.0,
+                                         max_value=30.0,
+                                         value=22.4,
+                                         step=0.1,
+                                         format="%.1f")
         with col3:
             z_measured = st.number_input("Z-Dimension (Height)", 
-                                        min_value=15.0,
-                                        max_value=30.0,
-                                        value=22.4,
-                                        step=0.1,
-                                        format="%.1f")
+                                         min_value=15.0,
+                                         max_value=30.0,
+                                         value=22.4,
+                                         step=0.1,
+                                         format="%.1f")
         
         submitted = st.form_submit_button("Verify Dimensions")
         
@@ -202,20 +201,20 @@ with tab1:
             cols = st.columns(3)
             with cols[0]:
                 st.metric("X-Dimension", f"{x_measured:.1f} mm", 
-                         delta=f"{x_deviation:.1f} mm",
-                         delta_color="normal" if x_status == "✅ Pass" else "inverse")
+                          delta=f"{x_deviation:.1f} mm",
+                          delta_color="normal" if x_status == "✅ Pass" else "inverse")
                 st.markdown(f'<div class="{"pass-metric" if x_status == "✅ Pass" else "fail-metric"}">{x_status}</div>', 
                             unsafe_allow_html=True)
             with cols[1]:
                 st.metric("Y-Dimension", f"{y_measured:.1f} mm", 
-                         delta=f"{y_deviation:.1f} mm",
-                         delta_color="normal" if y_status == "✅ Pass" else "inverse")
+                          delta=f"{y_deviation:.1f} mm",
+                          delta_color="normal" if y_status == "✅ Pass" else "inverse")
                 st.markdown(f'<div class="{"pass-metric" if y_status == "✅ Pass" else "fail-metric"}">{y_status}</div>', 
                             unsafe_allow_html=True)
             with cols[2]:
                 st.metric("Z-Dimension", f"{z_measured:.1f} mm", 
-                         delta=f"{z_deviation:.1f} mm",
-                         delta_color="normal" if z_status == "✅ Pass" else "inverse")
+                          delta=f"{z_deviation:.1f} mm",
+                          delta_color="normal" if z_status == "✅ Pass" else "inverse")
                 st.markdown(f'<div class="{"pass-metric" if z_status == "✅ Pass" else "fail-metric"}">{z_status}</div>', 
                             unsafe_allow_html=True)
             
@@ -238,30 +237,30 @@ with tab2:
         col1, col2, col3 = st.columns(3)
         with col1:
             support_span = st.number_input("Support Span (L) in mm", 
-                                          min_value=10.0, 
-                                          max_value=200.0, 
-                                          value=100.0,
-                                          help="Distance between support rods")
+                                             min_value=10.0, 
+                                             max_value=200.0, 
+                                             value=100.0,
+                                             help="Distance between support rods")
         with col2:
             width = st.number_input("Width (b) in mm", 
-                                   min_value=10.0, 
-                                   max_value=50.0, 
-                                   value=22.4,
-                                   help="Test bar width dimension")
+                                       min_value=10.0, 
+                                       max_value=50.0, 
+                                       value=22.4,
+                                       help="Test bar width dimension")
         with col3:
             height = st.number_input("Height (h) in mm", 
-                                    min_value=10.0, 
-                                    max_value=50.0, 
-                                    value=22.4,
-                                    help="Test bar height dimension")
+                                        min_value=10.0, 
+                                        max_value=50.0, 
+                                        value=22.4,
+                                        help="Test bar height dimension")
     
     st.divider()
     
     st.subheader("Upload Bend Test Data")
     bend_files = st.file_uploader("Upload CSV files from bend test machine", 
-                                 type=["csv"],
-                                 accept_multiple_files=True,
-                                 help="Should contain force measurements in kN in the third column (position)")
+                                  type=["csv"],
+                                  accept_multiple_files=True,
+                                  help="Should contain force measurements in kN in the third column (position)")
     
     if bend_files:
         # Initialize lists to store results for summary table
@@ -322,8 +321,8 @@ with tab2:
                 col1.metric("Maximum Force", f"{max_force:.2f} N")
                 col2.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")
                 col3.metric("Quality Status", status, 
-                           delta=f"Target: 260 N/cm²", 
-                           delta_color="normal")
+                            delta=f"Target: 260 N/cm²", 
+                            delta_color="normal")
                 
                 # Create dual-axis plot for force and stress progression
                 fig, ax1 = plt.subplots(figsize=(10, 6))
@@ -465,9 +464,9 @@ with tab3:
     st.caption("Calculate binder content according to section 3.5 of Quality Control Manual")
     
     method = st.radio("Test Method", 
-                     ["Bunsen Burner (Section 3.5.1)", "Oven (Section 3.5.2)"],
-                     index=0,
-                     horizontal=True)
+                      ["Bunsen Burner (Section 3.5.1)", "Oven (Section 3.5.2)"],
+                      index=0,
+                      horizontal=True)
     
     with st.form("loi_calculation"):
         st.subheader("Enter Measurement Values")
@@ -475,25 +474,27 @@ with tab3:
         
         with col1:
             t1 = st.number_input("T1 (Bowl Weight) in g", 
-                                value=-44.904,
-                                format="%.3f",
-                                help="Negative value shown on scale after taring")
+                                 value=-44.904,
+                                 format="%.3f",
+                                 help="Negative value shown on scale after taring")
         with col2:
             w1 = st.number_input("W1 (Sample Weight) in g", 
-                                min_value=20.0,
-                                max_value=40.0,
-                                value=30.023,
-                                format="%.3f")
+                                 min_value=20.0,
+                                 max_value=40.0,
+                                 value=30.023,
+                                 format="%.3f")
         with col3:
             t2 = st.number_input("T2 (Bowl + Ash) in g", 
-                                value=-74.422,
-                                format="%.3f",
-                                help="Negative value shown on scale after taring")
+                                 value=-74.422,
+                                 format="%.3f",
+                                 help="Negative value shown on scale after taring")
         
         submitted = st.form_submit_button("Calculate LOI")
         
         if submitted:
             try:
+                # The manual's formula, which uses absolute values of tared bowl weights,
+                # is not standard but is implemented as specified.
                 delta_m = (abs(t2) - abs(t1)) - w1
                 loi = (abs(delta_m) / w1) * 100
                 
@@ -521,12 +522,12 @@ with tab3:
                     # Create summary sheet
                     summary_df = pd.DataFrame({
                         'Parameter': ['Test Date', 'Operator', 'Test ID', 
-                                     'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
-                                     'Mass Loss (g)', 'LOI (%)', 'Status'],
+                                      'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
+                                      'Mass Loss (g)', 'LOI (%)', 'Status'],
                         'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 
-                                 'Operator Name', 'LOI-001',
-                                 method, t1, w1, t2,
-                                 abs(delta_m), loi, status]
+                                  'Operator Name', 'LOI-001',
+                                  method, t1, w1, t2,
+                                  abs(delta_m), loi, status]
                     })
                     summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
                     
@@ -609,44 +610,3 @@ st.divider()
 st.caption("""
 **Quality Control Manual Reference:** PDB_02P06PDBQL2 (Version 0001, Dec 2022) 
 """)
-```
-
-### Changes Made
-- **Fixed SyntaxError**: In the artifact description (not the code), updated the comment from:
-  ```
-  - Creates a summary table with `Filename`, `Part ID`, `Job No`, `Max Force (N)`, `Bending Strength (N/cm²)`, and `Status`.
-  ```
-  to:
-  ```
-  - Creates a summary table with `Filename`, `Part ID`, `Job No`, `Max Force (N)`, `Bending Strength (N/cm^2)`, and `Status`.
-  ```
-  Replaced the Unicode `²` with `^2` to ensure ASCII compatibility, resolving the `SyntaxError`.
-- **Code Integrity**: The executable Python code was not modified, as the error was in the artifact description comment. The code correctly uses `N/cm²` in strings (e.g., `st.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")`), which is valid for display in Streamlit.
-- **Table Column**: Ensured the results dictionary uses `'Bending Strength (N/cm^2)'` for the summary table column name, matching the comment fix for consistency.
-
-### Verification
-- **Syntax**: The comment now uses `N/cm^2`, which is ASCII-compatible and prevents the `SyntaxError`.
-- **Functionality**: The code remains unchanged and continues to:
-  - Use the `position` column (third column) as force in kN, converted to Newtons (`df['force_n'] = df['position'] * 1000`).
-  - Calculate maximum force: `max_force = df['force_n'].abs().max()`.
-  - Compute bending strength at max force: `σ_mpa = (3 * F * L) / (2 * b * h^2)`, `σ_ncm2 = σ_mpa * 100`.
-  - Support multiple CSV uploads, displaying a summary table and individual plots.
-  - Generate a combined Excel report with a summary sheet and raw data sheets.
-- **CSV Example**: For `2025_0731_1110221A(1).csv`:
-  - `position`: -0.016711 to -1.515921 kN → `force_n`: -16.711 to -1515.921 N.
-  - `max_force = 1515.921 N`.
-  - Stress at max force (with `L=100 mm`, `b=22.4 mm`, `h=22.4 mm`): `σ_mpa = (3 * 1515.921 * 100) / (2 * 22.4 * 22.4^2) = 20.204 MPa`, `σ_ncm2 = 2020.4 N/cm^2`.
-  - Status: `✅ Pass` (2020.4 > 260).
-- **Output**:
-  - Metrics: Max Force = 1515.92 N, Bending Strength = 2020.40 N/cm², Status = ✅ Pass.
-  - Plot: Dual-axis showing force (0 to 1515.921 N) and stress (0 to 2020.4 N/cm²).
-  - Excel: Summary sheet with results, raw data sheet named `2025_0731_1110221A(1)`.
-
-### Notes
-- **Image Files**: Ensure `brafe_logo.png`, `x_measurement.png`, `y_measurement.png`, and `z_measurement.png` are in `/mount/src/voxeljet-quality-app/`. If not, the code uses placeholders. Alternatively, use base64 strings or URLs (e.g., `st.image("https://example.com/brafe_logo.png")`).
-- **Unit Conversion**: Assumes `position` is in kN (multiplied by 1000). If it’s in another unit (e.g., pounds, where 1 lb = 4.4482216152605 N), provide the conversion factor.
-- **Dependencies**: Requires `streamlit`, `pandas`, `numpy`, `matplotlib`, `Pillow`, `xlsxwriter`, `io`, `os`, `re`. Install with `pip install streamlit pandas numpy matplotlib Pillow xlsxwriter`.
-- **Testing**: Save as `app.py` and run `streamlit run app.py`. Test with multiple CSVs to verify the summary table and Excel report. Check Streamlit Cloud logs if errors persist.
-- **Unicode in Comments**: Avoid Unicode characters like `²` in Python comments. Use `^2` or other ASCII representations to prevent parsing errors.
-
-If you encounter further errors, need image paths, or require adjustments (e.g., different conversion factors, Chart.js plotting), please let me know!
