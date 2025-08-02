@@ -246,6 +246,10 @@ with tab2:
     if 'file_dimensions' not in st.session_state:
         st.session_state.file_dimensions = {}
     
+    # Operator input
+    operator_name = st.text_input("Operator Name", "John Doe")
+    test_id = st.text_input("Test ID", "TEST-001")
+    
     bend_files = st.file_uploader("Upload CSV files from bend test machine",
                                   type=["csv"],
                                   accept_multiple_files=True,
@@ -256,6 +260,7 @@ with tab2:
         results = []
         dfs = []
         dimension_entries = []
+        graphs = []  # Store graph images for Excel
         
         # Create dimension input section
         with st.expander("⚙️ Set Test Bar Dimensions for Each File", expanded=True):
@@ -440,6 +445,12 @@ with tab2:
                 ax.legend()
                 ax.grid(True)
                 st.pyplot(fig)
+                
+                # Save plot for Excel
+                img_buffer = BytesIO()
+                plt.savefig(img_buffer, format='png')
+                plt.close(fig)
+                graphs.append((filename, img_buffer))
 
                 if bending_strength < nominal_strength:
                     st.warning("""
@@ -474,57 +485,192 @@ with tab2:
             # Generate combined Excel report
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Write summary sheet
-                summary_df.to_excel(writer, sheet_name='Summary', index=False)
-
-                # Write raw data for each file
-                for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
-                    df.to_excel(writer, sheet_name=safe_sheet_name)
-
+                # ========== Create Front Page ==========
+                front_sheet = workbook.add_worksheet('Test Parameters')
+                
+                # Add Brafe logo if available
+                logo_height = 50
+                if brafe_logo:
+                    try:
+                        logo_path = 'brafe_logo.png'
+                        front_sheet.insert_image('B2', logo_path, {'x_scale': 0.5, 'y_scale': 0.5})
+                        logo_height = 80  # Increase row height for logo
+                    except Exception as e:
+                        st.warning(f"Could not add logo to Excel: {str(e)}")
+                
                 # Formatting
-                workbook = writer.book
-                summary_sheet = writer.sheets['Summary']
+                title_format = workbook.add_format({
+                    'bold': True,
+                    'font_size': 16,
+                    'align': 'center',
+                    'valign': 'vcenter'
+                })
+                
                 header_format = workbook.add_format({
+                    'bold': True,
+                    'bg_color': '#003366',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'left'
+                })
+                
+                value_format = workbook.add_format({
+                    'border': 1,
+                    'align': 'left'
+                })
+                
+                # Set column widths
+                front_sheet.set_column('A:A', 2)  # Padding
+                front_sheet.set_column('B:B', 25)  # Parameter column
+                front_sheet.set_column('C:C', 25)  # Value column
+                
+                # Set row heights
+                front_sheet.set_row(0, 5)  # Top padding
+                front_sheet.set_row(1, logo_height)  # Logo row
+                front_sheet.set_row(2, 5)  # Spacer
+                front_sheet.set_row(3, 20)  # Title row
+                
+                # Add title
+                front_sheet.merge_range('B4:C4', 'Brafe Engineering - Bend Test Report', title_format)
+                
+                # Add test parameters table
+                test_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                
+                # Basic test info
+                front_sheet.write_string(5, 1, "Parameter", header_format)
+                front_sheet.write_string(5, 2, "Value", header_format)
+                
+                test_info = [
+                    ("Test Date", test_date),
+                    ("Operator", operator_name),
+                    ("Test ID", test_id),
+                    ("", ""),  # Spacer
+                    ("Part ID", part_id),
+                    ("Job No", job_no),
+                    ("Support Span (mm)", f"{L}"),
+                    ("Width (mm)", f"{b}"),
+                    ("Height (mm)", f"{h}"),
+                    ("Max Force (N)", f"{max_force_n:.2f}"),
+                    ("Bending Strength (N/cm²)", f"{bending_strength:.2f}"),
+                    ("Status", status)
+                ]
+                
+                for i, (param, value) in enumerate(test_info, start=6):
+                    front_sheet.write_string(i, 1, param, header_format)
+                    front_sheet.write_string(i, 2, value, value_format)
+                
+                # Add summary table title
+                front_sheet.write_string(18, 1, "Summary of All Tests", title_format)
+                
+                # Add summary table
+                summary_start_row = 19
+                summary_headers = summary_df.columns.tolist()
+                
+                # Write headers
+                for col_idx, header in enumerate(summary_headers):
+                    front_sheet.write_string(summary_start_row, col_idx + 1, header, header_format)
+                
+                # Write data
+                for row_idx, row in enumerate(summary_df.values.tolist()):
+                    for col_idx, value in enumerate(row):
+                        if isinstance(value, float):
+                            if "Force" in summary_headers[col_idx] or "Strength" in summary_headers[col_idx]:
+                                front_sheet.write_number(
+                                    summary_start_row + row_idx + 1, 
+                                    col_idx + 1, 
+                                    value,
+                                    value_format
+                                )
+                            else:
+                                front_sheet.write_string(
+                                    summary_start_row + row_idx + 1, 
+                                    col_idx + 1, 
+                                    str(value),
+                                    value_format
+                                )
+                        else:
+                            front_sheet.write_string(
+                                summary_start_row + row_idx + 1, 
+                                col_idx + 1, 
+                                str(value),
+                                value_format
+                            )
+                
+                # ========== Create Summary Sheet ==========
+                summary_sheet = workbook.add_worksheet('Summary')
+                summary_df.to_excel(writer, sheet_name='Summary', index=False, startrow=1)
+                
+                # Format summary sheet
+                summary_header_format = workbook.add_format({
                     'bold': True,
                     'bg_color': '#003366',
                     'font_color': 'white',
                     'border': 1
                 })
-                pass_format = workbook.add_format({
-                    'bg_color': '#d4edda',
-                    'font_color': '#155724'
-                })
-                fail_format = workbook.add_format({
-                    'bg_color': '#f8d7da',
-                    'font_color': '#721c24'
-                })
-
+                
+                # Apply header formatting
                 for col_num, value in enumerate(summary_df.columns):
-                    summary_sheet.write(0, col_num, value, header_format)
-
-                status_col = summary_df.columns.get_loc('Status')
-                for row in range(1, len(summary_df) + 1):
-                    status_value = summary_df.loc[row - 1, 'Status']
-                    if status_value == "✅ Pass":
-                        summary_sheet.write(row, status_col, status_value, pass_format)
-                    else:
-                        summary_sheet.write(row, status_col, status_value, fail_format)
-
-                for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
-                    raw_sheet = writer.sheets[safe_sheet_name]
-                    raw_sheet.write_row(0, 0, df.columns.values, header_format)
-
-                summary_sheet.set_column('A:B', 25)
-                summary_sheet.set_column('C:I', 15)
-                for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
-                    writer.sheets[safe_sheet_name].set_column('A:Z', 15)
+                    summary_sheet.write(1, col_num, value, summary_header_format)
+                
+                # ========== Create Sheets for Each Test ==========
+                for idx, (filename, df) in enumerate(dfs):
+                    # Get graph for this file
+                    graph_img = next((g for f, g in graphs if f == filename), None)
+                    
+                    # Create parameter sheet
+                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:28] + "_Params"
+                    param_sheet = workbook.add_worksheet(safe_sheet_name)
+                    
+                    # Add test parameters
+                    param_sheet.write_string(0, 0, "Parameter", header_format)
+                    param_sheet.write_string(0, 1, "Value", header_format)
+                    
+                    test_params = [
+                        ("Test Date", test_date),
+                        ("Operator", operator_name),
+                        ("Test ID", test_id),
+                        ("Part ID", part_id),
+                        ("Job No", job_no),
+                        ("Support Span (mm)", f"{L}"),
+                        ("Width (mm)", f"{b}"),
+                        ("Height (mm)", f"{h}"),
+                        ("Max Force (N)", f"{max_force_n:.2f}"),
+                        ("Bending Strength (N/cm²)", f"{bending_strength:.2f}"),
+                        ("Status", status)
+                    ]
+                    
+                    for row_idx, (param, value) in enumerate(test_params, start=1):
+                        param_sheet.write_string(row_idx, 0, param, header_format)
+                        param_sheet.write_string(row_idx, 1, value, value_format)
+                    
+                    # Add graph if available
+                    if graph_img:
+                        try:
+                            graph_img.seek(0)
+                            param_sheet.insert_image('D2', f'{filename}_graph.png', 
+                                                    {'image_data': graph_img, 
+                                                     'x_scale': 0.8, 
+                                                     'y_scale': 0.8})
+                        except Exception as e:
+                            st.warning(f"Could not add graph to Excel: {str(e)}")
+                    
+                    # Create raw data sheet
+                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:28] + "_Data"
+                    raw_sheet = workbook.add_worksheet(safe_sheet_name)
+                    
+                    # Write raw data headers
+                    headers = df.columns.tolist()
+                    for col_idx, header in enumerate(headers):
+                        raw_sheet.write(0, col_idx, header, header_format)
+                    
+                    # Write raw data
+                    for row_idx, row in enumerate(df.values):
+                        for col_idx, value in enumerate(row):
+                            raw_sheet.write(row_idx + 1, col_idx, value)
 
             # Download button
             st.download_button(
-                label="Download Combined Excel Report",
+                label="Download Excel Report",
                 data=output.getvalue(),
                 file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
