@@ -234,25 +234,14 @@ with tab2:
     st.caption("Calculate bending strength according to section 3.4 of Quality Control Manual")
     
     with st.expander("⚙️ Test Parameters", expanded=True):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            support_span = st.number_input("Support Span (L) in mm", 
-                                             min_value=10.0, 
-                                             max_value=200.0, 
-                                             value=100.0,
-                                             help="Distance between support rods")
-        with col2:
-            width = st.number_input("Width (b) in mm", 
-                                       min_value=10.0, 
-                                       max_value=50.0, 
-                                       value=22.4,
-                                       help="Test bar width dimension")
-        with col3:
-            height = st.number_input("Height (h) in mm", 
-                                        min_value=10.0, 
-                                        max_value=50.0, 
-                                        value=22.4,
-                                        help="Test bar height dimension")
+        # Hardcode test bar dimensions as per the manual
+        support_span = 172.0
+        width = 22.4
+        height = 22.4
+        
+        st.write(f"**Support Span (L):** {support_span} mm")
+        st.write(f"**Width (b):** {width} mm")
+        st.write(f"**Height (h):** {height} mm")
     
     st.divider()
     
