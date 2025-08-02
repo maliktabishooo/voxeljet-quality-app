@@ -334,17 +334,21 @@ with tab2:
                 b = dims['b']
                 h = dims['h']
                 
-                # Read CSV - using last column as force (Newtons)
+                # Read CSV - handle trailing commas
                 df = pd.read_csv(bend_file, header=None)
+                
+                # Fix for files with trailing commas (like the example)
+                # Remove any empty columns at the end
+                df = df.dropna(axis=1, how='all')
                 
                 # Validate column count
                 if len(df.columns) < 6:
                     st.error(f"File '{filename}' has only {len(df.columns)} columns. Expected at least 6 columns.")
                     continue
                     
-                # Rename columns - focus on last column for force
+                # Rename columns - use 6th column for force (index 5)
                 df.columns = [f'col_{i}' for i in range(len(df.columns))]
-                df['force_n'] = df.iloc[:, -1]  # Use last column as force
+                df['force_n'] = df.iloc[:, 5]  # Use 6th column as force
                 
                 # Clean data
                 df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['force_n'])
@@ -389,8 +393,12 @@ with tab2:
                 
                 # Extract part ID and job number from filename
                 try:
-                    part_id = filename.split("_")[0]
-                    job_no = filename.split("_")[1] if len(filename.split("_")) > 1 else "N/A"
+                    # Example filename: 2025_0731_1110221A(1).csv
+                    # Extract date and identifier
+                    date_part = filename.split("_")[0] + "_" + filename.split("_")[1]
+                    identifier = filename.split("_")[2].split("(")[0]
+                    job_no = filename.split("(")[1].split(")")[0] if "(" in filename else "N/A"
+                    part_id = f"{date_part}_{identifier}"
                 except:
                     part_id = "Unknown"
                     job_no = "N/A"
@@ -447,7 +455,7 @@ with tab2:
                 st.info("""
                 **Required CSV Format:**
                 - Must have at least 6 columns
-                - Last column should contain force values in Newtons (N)
+                - 6th column should contain force values in Newtons (N)
                 - Example row: `-10.7649,0,0,1.064,1.064,10.7649`
                 """)
 
@@ -521,7 +529,6 @@ with tab2:
                 file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
     st.caption("Calculate binder content according to section 3.5 of Quality Control Manual")
