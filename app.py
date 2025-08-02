@@ -238,7 +238,7 @@ with tab2:
     st.header("3-Point Bend Test Analysis")
     st.caption("Calculate bending strength according to section 3.4 of Quality Control Manual")
 
-    # --- START OF MODIFIED CODE: Dynamic Dimension Inputs ---
+    # Dynamic Dimension Inputs
     with st.expander("⚙️ Test Parameters", expanded=True):
         st.subheader("Enter Test Bar Dimensions (mm)")
         col1, col2, col3 = st.columns(3)
@@ -248,8 +248,7 @@ with tab2:
             width = st.number_input("**Width (b)**", value=20.0, min_value=1.0, format="%.1f", help="Width of the test bar.")
         with col3:
             height = st.number_input("**Height (h)**", value=10.0, min_value=1.0, format="%.1f", help="Height (thickness) of the test bar.")
-    # --- END OF MODIFIED CODE ---
-
+            
     st.divider()
 
     st.subheader("Upload Bend Test Data")
@@ -283,33 +282,25 @@ with tab2:
                                  names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
                                  index_col=False)
                 
-                # --- START OF MODIFIED DATA CLEANING CODE ---
-                # Drop all rows where 'y_axis_measure' (force) is non-numeric or NaN
-                df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['y_axis_measure'])
+                # --- START OF CORRECTED & ENHANCED CODE ---
+                # Drop rows where the first column ('force_kn') is non-numeric or NaN
+                df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['force_kn'])
                 
-                # Find the start of the test data by identifying the first point
-                # where force starts to increase consistently from near zero.
-                # Use a rolling median to be robust against single noisy points.
-                if 'y_axis_measure' in df.columns and not df['y_axis_measure'].empty:
-                    rolling_median = df['y_axis_measure'].rolling(window=10, center=True).median()
-                    start_of_test_index = rolling_median[rolling_median > 0.05].first_valid_index()
-                    if start_of_test_index is None:
-                        start_of_test_index = 0
-                else:
-                    st.warning(f"File '{filename}' does not contain valid 'y_axis_measure' data.")
-                    continue
-                
-                # Apply a rolling average to smooth the data from the start of the test onwards.
-                smoothed_force = df['y_axis_measure'].iloc[start_of_test_index:].rolling(window=5, min_periods=1).mean()
-                
-                # The maximum value of the smoothed data is the peak force in kilonewtons.
-                max_force_kn = smoothed_force.max()
-                
-                # --- END OF MODIFIED DATA CLEANING CODE ---
-                
-                # Convert from kilonewtons (kN) to Newtons (N) for the formula
-                max_force_n = max_force_kn * 1000
+                # Filter out negative force values as requested
+                df = df[df['force_kn'] >= 0]
 
+                if df.empty:
+                    st.warning(f"File '{filename}' does not contain any valid positive force data.")
+                    continue
+
+                # Use a rolling average to smooth the data.
+                smoothed_force_n = df['force_kn'].rolling(window=5, min_periods=1).mean()
+                
+                # The maximum value of the smoothed data is the peak force in Newtons.
+                max_force_n = smoothed_force_n.max()
+                
+                # --- END OF CORRECTED & ENHANCED CODE ---
+                
                 # Calculate bending strength: σ = (3FL)/(2bh²)
                 bending_strength_nmm2 = (3 * max_force_n * support_span) / (2 * width * height**2)
                 bending_strength_ncm2 = bending_strength_nmm2 * 100
@@ -345,7 +336,7 @@ with tab2:
                 ax1.set_xlabel('Time (s)')
                 ax1.set_ylabel('Force (N)', color=color)
                 # Plotting the smoothed force data
-                ax1.plot(df['time'].iloc[start_of_test_index:], smoothed_force * 1000, color=color, label='Smoothed Force')
+                ax1.plot(df['time'], smoothed_force_n, color=color, label='Smoothed Force')
                 ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Smoothed Force')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True)
@@ -356,8 +347,8 @@ with tab2:
                 ax2.set_ylabel('Stress (N/cm²)', color=color)
                 
                 # Recalculate stress for the plot using the smoothed force data
-                smoothed_stress_ncm2 = ((3 * (smoothed_force * 1000) * support_span) / (2 * width * height**2)) * 100
-                ax2.plot(df['time'].iloc[start_of_test_index:], smoothed_stress_ncm2, color=color, label='Smoothed Stress')
+                smoothed_stress_ncm2 = ((3 * smoothed_force_n * support_span) / (2 * width * height**2)) * 100
+                ax2.plot(df['time'], smoothed_stress_ncm2, color=color, label='Smoothed Stress')
                 ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
                 ax2.tick_params(axis='y', labelcolor=color)
 
@@ -383,7 +374,7 @@ with tab2:
                 **Required CSV Format:**
                 - Must have exactly 6 columns
                 - Columns must contain (in order):
-                  1. Force (kN)
+                  1. Force (N)
                   2. Point index
                   3. Position (mm)
                   4. Time (s)
