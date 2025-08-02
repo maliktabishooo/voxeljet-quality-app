@@ -482,6 +482,7 @@ with tab2:
                 'Bending Strength (N/cm²)': '{:.2f}'
             }))
 # Generate combined Excel report
+# Generate combined Excel report
 output = BytesIO()
 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     # Get the workbook object
@@ -494,11 +495,14 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     logo_height = 50
     if brafe_logo:
         try:
-            # Create a temporary file for the logo
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_logo:
-                brafe_logo.save(tmp_logo.name)
-                front_sheet.insert_image('B2', tmp_logo.name, {'x_scale': 0.5, 'y_scale': 0.5})
-                logo_height = 80  # Increase row height for logo
+            # Save logo to BytesIO buffer
+            logo_buffer = BytesIO()
+            brafe_logo.save(logo_buffer, format='PNG')
+            logo_data = logo_buffer.getvalue()
+            
+            # Insert logo into Excel
+            front_sheet.insert_image('B2', 'brafe_logo.png', {'image_data': logo_data, 'x_scale': 0.5, 'y_scale': 0.5})
+            logo_height = 80  # Increase row height for logo
         except Exception as e:
             st.warning(f"Could not add logo to Excel: {str(e)}")
     
@@ -555,7 +559,7 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     status = 'N/A'
     
     # Get values from results if available
-    if results and len(results) > 0:
+    if results:
         first_result = results[0]
         part_id = first_result.get('Part ID', 'N/A')
         job_no = first_result.get('Job No', 'N/A')
@@ -589,7 +593,7 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     front_sheet.write_string(18, 1, "Summary of All Tests", title_format)
     
     # Add summary table if results exist
-    if results and len(results) > 0:
+    if results:
         summary_start_row = 19
         summary_headers = summary_df.columns.tolist()
         
@@ -601,20 +605,12 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         for row_idx, row in enumerate(summary_df.values.tolist()):
             for col_idx, value in enumerate(row):
                 if isinstance(value, float):
-                    if "Force" in summary_headers[col_idx] or "Strength" in summary_headers[col_idx]:
-                        front_sheet.write_number(
-                            summary_start_row + row_idx + 1, 
-                            col_idx + 1, 
-                            value,
-                            value_format
-                        )
-                    else:
-                        front_sheet.write_string(
-                            summary_start_row + row_idx + 1, 
-                            col_idx + 1, 
-                            str(value),
-                            value_format
-                        )
+                    front_sheet.write_number(
+                        summary_start_row + row_idx + 1, 
+                        col_idx + 1, 
+                        value,
+                        value_format
+                    )
                 else:
                     front_sheet.write_string(
                         summary_start_row + row_idx + 1, 
@@ -625,7 +621,7 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     
     # ========== Create Summary Sheet ==========
     summary_sheet = workbook.add_worksheet('Summary')
-    if results and len(results) > 0:
+    if results:
         summary_df.to_excel(writer, sheet_name='Summary', index=False, startrow=1)
         
         # Format summary sheet
@@ -641,11 +637,8 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             summary_sheet.write(1, col_num, value, summary_header_format)
     
     # ========== Create Sheets for Each Test ==========
-    if graphs and len(graphs) > 0 and results and len(results) > 0:
+    if results and dfs:
         for idx, (filename, df) in enumerate(dfs):
-            # Get graph for this file
-            graph_img = next((g for f, g in graphs if f == filename), None)
-            
             # Create parameter sheet
             safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:28] + "_Params"
             param_sheet = workbook.add_worksheet(safe_sheet_name)
@@ -683,17 +676,6 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 param_sheet.write_string(row_idx, 0, param, header_format)
                 param_sheet.write_string(row_idx, 1, value, value_format)
             
-            # Add graph if available
-            if graph_img:
-                try:
-                    graph_img.seek(0)
-                    param_sheet.insert_image('D2', f'{filename}_graph.png', 
-                                            {'image_data': graph_img, 
-                                             'x_scale': 0.8, 
-                                             'y_scale': 0.8})
-                except Exception as e:
-                    st.warning(f"Could not add graph to Excel: {str(e)}")
-            
             # Create raw data sheet
             safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:28] + "_Data"
             raw_sheet = workbook.add_worksheet(safe_sheet_name)
@@ -709,7 +691,7 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     raw_sheet.write(row_idx + 1, col_idx, value)
 
 # Only show download button if we have results
-if results and len(results) > 0:
+if results:
     st.download_button(
         label="Download Excel Report",
         data=output.getvalue(),
