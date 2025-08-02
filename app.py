@@ -481,8 +481,7 @@ with tab2:
                 'Max Force (N)': '{:.2f}',
                 'Bending Strength (N/cm²)': '{:.2f}'
             }))
-
-          # Generate combined Excel report
+# Generate combined Excel report
 output = BytesIO()
 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     # Get the workbook object
@@ -545,8 +544,18 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     front_sheet.write_string(5, 1, "Parameter", header_format)
     front_sheet.write_string(5, 2, "Value", header_format)
     
-    # Get values from the first result for the front page
-    if results:
+    # Initialize fallback values
+    part_id = 'N/A'
+    job_no = 'N/A'
+    L = 172.0
+    b = 22.4
+    h = 22.4
+    max_force_n = 0
+    bending_strength = 0
+    status = 'N/A'
+    
+    # Get values from results if available
+    if results and len(results) > 0:
         first_result = results[0]
         part_id = first_result.get('Part ID', 'N/A')
         job_no = first_result.get('Job No', 'N/A')
@@ -556,16 +565,6 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         max_force_n = first_result.get('Max Force (N)', 0)
         bending_strength = first_result.get('Bending Strength (N/cm²)', 0)
         status = first_result.get('Status', 'N/A')
-    else:
-        # Fallback values if no results
-        part_id = 'N/A'
-        job_no = 'N/A'
-        L = 172.0
-        b = 22.4
-        h = 22.4
-        max_force_n = 0
-        bending_strength = 0
-        status = 'N/A'
     
     test_info = [
         ("Test Date", test_date),
@@ -589,8 +588,8 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     # Add summary table title
     front_sheet.write_string(18, 1, "Summary of All Tests", title_format)
     
-    # Add summary table
-    if results:
+    # Add summary table if results exist
+    if results and len(results) > 0:
         summary_start_row = 19
         summary_headers = summary_df.columns.tolist()
         
@@ -626,7 +625,7 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     
     # ========== Create Summary Sheet ==========
     summary_sheet = workbook.add_worksheet('Summary')
-    if results:
+    if results and len(results) > 0:
         summary_df.to_excel(writer, sheet_name='Summary', index=False, startrow=1)
         
         # Format summary sheet
@@ -642,7 +641,7 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             summary_sheet.write(1, col_num, value, summary_header_format)
     
     # ========== Create Sheets for Each Test ==========
-    if graphs and results:
+    if graphs and len(graphs) > 0 and results and len(results) > 0:
         for idx, (filename, df) in enumerate(dfs):
             # Get graph for this file
             graph_img = next((g for f, g in graphs if f == filename), None)
@@ -709,13 +708,17 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 for col_idx, value in enumerate(row):
                     raw_sheet.write(row_idx + 1, col_idx, value)
 
-# Download button
-st.download_button(
-    label="Download Excel Report",
-    data=output.getvalue(),
-    file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+# Only show download button if we have results
+if results and len(results) > 0:
+    st.download_button(
+        label="Download Excel Report",
+        data=output.getvalue(),
+        file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+else:
+    st.warning("No test results available to generate report")
+         
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
     st.caption("Calculate binder content according to section 3.5 of Quality Control Manual")
