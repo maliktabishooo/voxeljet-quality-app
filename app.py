@@ -281,10 +281,31 @@ with tab2:
                                     names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
                                     index_col=False)
                 
-                # --- START OF CODE MODIFICATION ---
+                # --- START OF CORRECTED CODE ---
                 
-                # Use column 1 ('force_kn') as the force values and handle negative signs
-                max_force_kn = df['force_kn'].abs().max()
+                # The raw data has a large negative spike at the beginning. 
+                # We need to find the point where the actual test begins, i.e.,
+                # where the force values are near zero and then start to increase.
+                # A robust way is to find the first index where force is close to zero
+                # and then find the max force from that point onwards.
+                
+                # Use the 'y_axis_measure' column as it represents the positive force values
+                # Find the first index where the force is below a small threshold (e.g., 1.0 kN)
+                start_of_test_index = df[df['y_axis_measure'].abs() < 1.0].first_valid_index()
+                
+                if start_of_test_index is None:
+                    # If no low values are found, assume the test starts at the beginning
+                    start_of_test_index = 0
+                else:
+                    # To be safe, skip a few more rows after the first low value
+                    start_of_test_index += 5 
+
+                # Calculate max force from the start of the test onwards
+                max_force_kn = df['y_axis_measure'].iloc[start_of_test_index:].max()
+                
+                # If max_force_kn is still very low or nan, fall back to a simpler method
+                if pd.isna(max_force_kn) or max_force_kn < 0.001:
+                    max_force_kn = df['y_axis_measure'].max()
 
                 # Convert from kilonewtons (kN) to Newtons (N) for the formula
                 max_force_n = max_force_kn * 1000
@@ -293,8 +314,8 @@ with tab2:
                 bending_strength_nmm2 = (3 * max_force_n * support_span) / (2 * width * height**2)
                 bending_strength_ncm2 = bending_strength_nmm2 * 100
 
-                # --- END OF CODE MODIFICATION ---
-
+                # --- END OF CORRECTED CODE ---
+                
                 status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
 
                 # Store results
@@ -327,7 +348,7 @@ with tab2:
                 color = 'tab:blue'
                 ax1.set_xlabel('Time (s)')
                 ax1.set_ylabel('Force (N)', color=color)
-                ax1.plot(df['time'], df['force_kn'].abs() * 1000, color=color, label='Force')
+                ax1.plot(df['time'], df['y_axis_measure'] * 1000, color=color, label='Force')
                 ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Force')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True)
@@ -338,7 +359,7 @@ with tab2:
                 ax2.set_ylabel('Stress (N/cm²)', color=color)
                 
                 # Recalculate stress for the plot using the new force data
-                df['stress_ncm2'] = ((3 * (df['force_kn'].abs() * 1000) * support_span) / (2 * width * height**2)) * 100
+                df['stress_ncm2'] = ((3 * (df['y_axis_measure'] * 1000) * support_span) / (2 * width * height**2)) * 100
                 ax2.plot(df['time'], df['stress_ncm2'], color=color, label='Stress')
                 ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
                 ax2.tick_params(axis='y', labelcolor=color)
