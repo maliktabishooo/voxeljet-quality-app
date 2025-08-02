@@ -218,6 +218,11 @@ with tab1:
                 st.markdown(f'<div class="{"pass-metric" if z_status == "✅ Pass" else "fail-metric"}">{z_status}</div>', 
                             unsafe_allow_html=True)
             
+            # New code: Add total dimension metric
+            total_dimension = x_measured + y_measured + z_measured
+            st.markdown("---")
+            st.metric("Total Measured Dimensions", f"{total_dimension:.1f} mm")
+            
             if all(status == "✅ Pass" for status in [x_status, y_status, z_status]):
                 st.success("All dimensions within specification!")
             else:
@@ -249,7 +254,7 @@ with tab2:
     bend_files = st.file_uploader("Upload CSV files from bend test machine", 
                                   type=["csv"],
                                   accept_multiple_files=True,
-                                  help="Should contain force measurements in kN in the third column (position)")
+                                  help="Should contain force measurements in kN in the first column")
     
     if bend_files:
         # Initialize lists to store results for summary table
@@ -271,15 +276,15 @@ with tab2:
                     part_id = "Unknown"
                     job_no = "N/A"
                 
-                # Read CSV
-                # Corrected column names and index to match the file structure
+                # Read CSV with updated column names based on the file format
+                # The force is in the 1st column, which is now named 'force_kn'
                 df = pd.read_csv(bend_file, 
                                  names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
                                  index_col=False)
                 df = df.set_index('time')
                 
                 # Use the 'force_kn' column which contains the force measurements in kN
-                # The corrected code now uses `df['force_kn']` instead of `df['position_mm']`
+                # This has been corrected to use the first column for force
                 
                 # Convert force from kN to N using a conversion factor
                 conversion_factor = 1000
