@@ -283,21 +283,37 @@ with tab2:
                                  index_col=False)
                 
                 # --- START OF CORRECTED & ENHANCED CODE ---
-                # Drop rows where the first column ('force_kn') is non-numeric or NaN
-                df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['force_kn'])
+                # Drop rows with non-numeric data in key columns
+                df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['force_kn', 'position_mm'])
                 
-                # Filter out negative force values as requested
+                # Filter out negative force values
                 df = df[df['force_kn'] >= 0]
+                
+                # Filter out any unrealistically large position values (e.g., > 100mm)
+                # This helps to remove sensor errors
+                df = df[df['position_mm'] < 100]
 
                 if df.empty:
-                    st.warning(f"File '{filename}' does not contain any valid positive force data.")
+                    st.warning(f"File '{filename}' does not contain any valid data after cleaning.")
                     continue
-
-                # Use a rolling average to smooth the data.
-                smoothed_force_n = df['force_kn'].rolling(window=5, min_periods=1).mean()
                 
-                # The maximum value of the smoothed data is the peak force in Newtons.
-                max_force_n = smoothed_force_n.max()
+                # Use a rolling window to detect the start of a consistent upward trend in position.
+                # This is more robust than looking for a single non-zero value.
+                # We look for a minimum change in position over a small window of 5 points.
+                position_change = df['position_mm'].diff().rolling(window=5, min_periods=1).mean()
+                start_of_test_index = position_change[position_change > 0.01].index[0] if not position_change[position_change > 0.01].empty else 0
+                
+                # Extract the relevant data from the start of the test
+                test_df = df.iloc[start_of_test_index:].reset_index(drop=True)
+                
+                # Use a rolling average to smooth the force data.
+                smoothed_force_kn = test_df['force_kn'].rolling(window=5, min_periods=1).mean()
+                
+                # The maximum value of the smoothed data is the peak force in kilonewtons.
+                max_force_kn = smoothed_force_kn.max()
+
+                # Convert from kilonewtons (kN) to Newtons (N) for the formula
+                max_force_n = max_force_kn * 1000
                 
                 # --- END OF CORRECTED & ENHANCED CODE ---
                 
@@ -336,7 +352,7 @@ with tab2:
                 ax1.set_xlabel('Time (s)')
                 ax1.set_ylabel('Force (N)', color=color)
                 # Plotting the smoothed force data
-                ax1.plot(df['time'], smoothed_force_n, color=color, label='Smoothed Force')
+                ax1.plot(test_df['time'], smoothed_force_kn * 1000, color=color, label='Smoothed Force')
                 ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Smoothed Force')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True)
@@ -347,8 +363,8 @@ with tab2:
                 ax2.set_ylabel('Stress (N/cm²)', color=color)
                 
                 # Recalculate stress for the plot using the smoothed force data
-                smoothed_stress_ncm2 = ((3 * smoothed_force_n * support_span) / (2 * width * height**2)) * 100
-                ax2.plot(df['time'], smoothed_stress_ncm2, color=color, label='Smoothed Stress')
+                smoothed_stress_ncm2 = ((3 * (smoothed_force_kn * 1000) * support_span) / (2 * width * height**2)) * 100
+                ax2.plot(test_df['time'], smoothed_stress_ncm2, color=color, label='Smoothed Stress')
                 ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
                 ax2.tick_params(axis='y', labelcolor=color)
 
@@ -374,7 +390,7 @@ with tab2:
                 **Required CSV Format:**
                 - Must have exactly 6 columns
                 - Columns must contain (in order):
-                  1. Force (N)
+                  1. Force (kN)
                   2. Point index
                   3. Position (mm)
                   4. Time (s)
