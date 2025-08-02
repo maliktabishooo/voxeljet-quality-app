@@ -234,65 +234,72 @@ with tab2:
     
     if bend_file is not None:
         try:
-            # Try to read CSV with automatic delimiter detection
-            df = pd.read_csv(bend_file, sep=None, engine='python')
+            # Extract part ID and job number from filename (Ben's method)
+            filename = bend_file.name
+            path_split_ext = os.path.splitext(filename)
+            path_split = os.path.split(path_split_ext[0])
+            test_key = path_split[1][16:] if len(path_split[1]) >= 16 else path_split[1]
             
-            # Show data preview
-            with st.expander("Preview of uploaded data"):
-                st.dataframe(df.head())
+            try:
+                part_id = test_key.split("(")[0]
+                job_no = test_key.split('(')[1][:-1]  # Remove closing parenthesis
+            except:
+                part_id = "Unknown"
+                job_no = "N/A"
             
-            # Identify force and time columns using pattern matching
-            force_col = None
-            time_col = None
+            # Read CSV with Ben's fixed column names
+            df = pd.read_csv(bend_file, 
+                             names=['force', 'point_index', 'position', 'time', 'x_axis_measure', 'y_axis_measure'],
+                             index_col=False)
+            df = df.set_index('time')
             
-            # Try to find columns that match force/time patterns
-            for col in df.columns:
-                col_lower = col.lower()
-                if 'force' in col_lower or 'load' in col_lower or 'f' in col_lower:
-                    force_col = col
-                if 'time' in col_lower or 'sec' in col_lower or 't' in col_lower:
-                    time_col = col
+            # Apply Ben's stress calculations
+            df['stress_mpa'] = (3 * df.y_axis_measure * support_span) / (2 * width * height**2)
+            df['stress_ncm2'] = df.stress_mpa * 100
             
-            # If columns not found, let user select
-            if force_col is None or time_col is None:
-                st.warning("Could not automatically identify force and time columns.")
-                col1, col2 = st.columns(2)
-                with col1:
-                    force_col = st.selectbox("Select Force Column", df.columns)
-                with col2:
-                    time_col = st.selectbox("Select Time Column", df.columns)
-                
-                if not st.button("Confirm Selection"):
-                    st.stop()
+            # Get max values
+            max_force = df['force'].abs().max()
+            max_stress_ncm2 = df['stress_ncm2'].max()
             
-            # Process the data
-            df = df.rename(columns={force_col: 'force', time_col: 'time'})
-            df['abs_force'] = df['force'].abs()
-            max_force = df['abs_force'].max()
-            
-            # Calculate bending strength
-            bending_strength_mpa = (3 * max_force * support_span) / (2 * width * height**2)
-            bending_strength_ncm2 = bending_strength_mpa * 100
-            
-            status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
+            status = "✅ Pass" if max_stress_ncm2 >= 260 else "❌ Fail"
             
             # Display results
             col1, col2, col3 = st.columns(3)
             col1.metric("Maximum Force", f"{max_force:.2f} N")
-            col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
+            col2.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")
             col3.metric("Quality Status", status, 
                        delta=f"Target: 260 N/cm²", 
                        delta_color="normal")
             
-            # Create force progression plot
-            fig, ax = plt.subplots(figsize=(10, 4))
-            ax.plot(df['time'], df['abs_force'], 'b-', label='Force')
-            ax.axhline(y=max_force, color='r', linestyle='--', label='Max Force')
-            ax.set_title('Force Progression During Bend Test')
-            ax.set_xlabel('Time (s)')
-            ax.set_ylabel('Force (N)')
-            ax.grid(True)
-            ax.legend()
+            # Show extracted metadata
+            st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
+            
+            # Create dual-axis plot for force and stress progression
+            fig, ax1 = plt.subplots(figsize=(10, 6))
+            
+            # Force plot (left axis)
+            color = 'tab:blue'
+            ax1.set_xlabel('Time (s)')
+            ax1.set_ylabel('Force (N)', color=color)
+            ax1.plot(df.index, df['force'].abs(), color=color, label='Force')
+            ax1.axhline(y=max_force, color=color, linestyle='--', label='Max Force')
+            ax1.tick_params(axis='y', labelcolor=color)
+            ax1.grid(True)
+            
+            # Stress plot (right axis)
+            ax2 = ax1.twinx()
+            color = 'tab:red'
+            ax2.set_ylabel('Stress (N/cm²)', color=color)
+            ax2.plot(df.index, df['stress_ncm2'], color=color, label='Stress')
+            ax2.axhline(y=max_stress_ncm2, color=color, linestyle='--', label='Max Stress')
+            ax2.tick_params(axis='y', labelcolor=color)
+            
+            # Add legends
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+            
+            plt.title('Force and Stress Progression During Bend Test')
             st.pyplot(fig)
             
             # Generate Excel report in Brafe template format
@@ -300,17 +307,18 @@ with tab2:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 # Create summary sheet
                 summary_df = pd.DataFrame({
-                    'Parameter': ['Test Date', 'Operator', 'Test ID', 
+                    'Parameter': ['Test Date', 'Operator', 'Test ID', 'Part ID', 'Job No',
                                  'Support Span (mm)', 'Width (mm)', 'Height (mm)',
                                  'Max Force (N)', 'Bending Strength (N/cm²)', 'Status'],
-                    'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 'Operator Name', 'TEST-001',
+                    'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 
+                             'Operator Name', 'TEST-001', part_id, job_no,
                              support_span, width, height,
-                             max_force, bending_strength_ncm2, status]
+                             max_force, max_stress_ncm2, status]
                 })
                 summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
                 
                 # Create data sheet
-                df.to_excel(writer, sheet_name='Raw Data', index=False)
+                df.to_excel(writer, sheet_name='Raw Data')
                 
                 # Formatting
                 workbook = writer.book
@@ -353,12 +361,9 @@ with tab2:
                         'format': fail_format
                     })
                 
-                # Add Brafe logo
-                # summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
-                
                 # Raw data sheet formatting
                 raw_sheet = writer.sheets['Raw Data']
-                for col_num, value in enumerate(df.columns.values):
+                for col_num, value in enumerate(df.reset_index().columns.values):
                     raw_sheet.write(0, col_num, value, header_format)
                 
                 # Set column widths
@@ -374,7 +379,7 @@ with tab2:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
-            if bending_strength_ncm2 < 260:
+            if max_stress_ncm2 < 260:
                 st.warning("""
                 **Recommendations to Increase Strength:**
                 - Place parts in oven at 140°C for 3 hours
@@ -385,13 +390,21 @@ with tab2:
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
             st.info("""
-            **Troubleshooting Tips:**
-            1. Ensure your CSV file has headers
-            2. Confirm it contains force and time data
-            3. Check the file isn't corrupted
-            4. Try exporting data in standard CSV format
+            **Required CSV Format:**
+            - Must have exactly 6 columns
+            - Columns must contain (in order):
+              1. Force measurements
+              2. Point index
+              3. Position
+              4. Time
+              5. X-axis measure
+              6. Y-axis measure
+              
+            **Filename Format:**
+            - Must follow pattern: `..._XXXXXXXX(JJJ).csv`
+            - Where `XXXXXXXX` = Part ID
+            - Where `JJJ` = Job Number
             """)
-
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
     st.caption("Calculate binder content according to section 3.5 of Quality Control Manual")
