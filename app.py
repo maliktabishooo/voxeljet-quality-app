@@ -1,29 +1,10 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
-import base64
-from io import BytesIO
 import datetime
-import re
-import os  # Added the missing import
+from io import BytesIO
+import os
 
-# Load measurement images and Brafe logo
-x_img = Image.open('x_measurement.png')
-y_img = Image.open('y_measurement.png')
-z_img = Image.open('z_measurement.png')
-brafe_logo = Image.open('brafe_logo.png')
-
-# App configuration with updated blue theme
-st.set_page_config(
-    page_title="Brafe Engineering Quality Control",
-    page_icon=brafe_logo,
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Custom CSS for blue Brafe theme
+# Apply Brafe theme
 st.markdown(
     """
     <style>
@@ -84,7 +65,7 @@ st.markdown(
 
 # Sidebar with Brafe branding
 with st.sidebar:
-    st.image(brafe_logo, width=150)
+    st.image("brafe_logo.png", width=150)  # Replace with actual logo path
     st.header("Brafe Engineering Resources")
     st.markdown("[Quality Control Manual](https://www.brafeengineering.com/support/)")
     st.markdown("[Technical Support](mailto:support@brafeengineering.com)")
@@ -110,13 +91,13 @@ with tab1:
     with st.expander("📏 Measurement Instructions", expanded=True):
         cols = st.columns(3)
         with cols[0]:
-            st.image(x_img, caption="Measure Dimension X (Length)", use_container_width=True)
+            st.image("x_img.png", caption="Measure Dimension X (Length)", use_container_width=True)  # Replace with actual image path
             st.info("**X-Dimension:**\n- Length direction\n- Nominal: 172 mm")
         with cols[1]:
-            st.image(y_img, caption="Measure Dimension Y (Width)", use_container_width=True)
+            st.image("y_img.png", caption="Measure Dimension Y (Width)", use_container_width=True)  # Replace with actual image path
             st.info("**Y-Dimension:**\n- Width direction\n- Nominal: 22.4 mm")
         with cols[2]:
-            st.image(z_img, caption="Measure Dimension Z (Height)", use_container_width=True)
+            st.image("z_img.png", caption="Measure Dimension Z (Height)", use_container_width=True)  # Replace with actual image path
             st.info("**Z-Dimension:**\n- Height direction\n- Nominal: 22.4 mm")
         
         st.markdown("""
@@ -231,11 +212,11 @@ with tab2:
     st.subheader("Upload Bend Test Data")
     bend_file = st.file_uploader("Upload CSV from bend test machine", 
                                 type=["csv"],
-                                help="Should contain force measurements over time")
+                                help="Should contain force measurements in kN in the third column")
     
     if bend_file is not None:
         try:
-            # Extract part ID and job number from filename (Ben's method)
+            # Extract part ID and job number from filename
             filename = bend_file.name
             path_split_ext = os.path.splitext(filename)
             path_split = os.path.split(path_split_ext[0])
@@ -243,23 +224,27 @@ with tab2:
             
             try:
                 part_id = test_key.split("(")[0]
-                job_no = test_key.split('(')[1][:-1]  # Remove closing parenthesis
+                job_no = test_key.split('(')[1][:-1]
             except:
                 part_id = "Unknown"
                 job_no = "N/A"
             
-            # Read CSV with Ben's fixed column names
+            # Read CSV
             df = pd.read_csv(bend_file, 
                              names=['force', 'point_index', 'position', 'time', 'x_axis_measure', 'y_axis_measure'],
                              index_col=False)
             df = df.set_index('time')
             
-            # Apply Ben's stress calculations
-            df['stress_mpa'] = (3 * df.y_axis_measure * support_span) / (2 * width * height**2)
-            df['stress_ncm2'] = df.stress_mpa * 100
+            # Convert position (assumed kN) to force in Newtons
+            conversion_factor = 1000  # kN to N
+            df['force_n'] = df['position'] * conversion_factor
+            
+            # Calculate bending strength: σ = (3FL)/(2bh²)
+            df['stress_mpa'] = (3 * df['force_n'] * support_span) / (2 * width * height**2)
+            df['stress_ncm2'] = df['stress_mpa'] * 100
             
             # Get max values
-            max_force = df['force'].abs().max()
+            max_force = df['force_n'].abs().max()
             max_stress_ncm2 = df['stress_ncm2'].max()
             
             status = "✅ Pass" if max_stress_ncm2 >= 260 else "❌ Fail"
@@ -275,38 +260,91 @@ with tab2:
             # Show extracted metadata
             st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
             
-            # Create dual-axis plot for force and stress progression
-            fig, ax1 = plt.subplots(figsize=(10, 6))
+            # Create Chart.js plot
+            st.markdown("""
+            <div id="chart-container"></div>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+            const ctx = document.createElement('canvas');
+            document.getElementById('chart-container').appendChild(ctx);
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: """ + str(df.index.tolist()) + """,
+                    datasets: [
+                        {
+                            label: 'Force (N)',
+                            data: """ + str(df['force_n'].abs().tolist()) + """,
+                            borderColor: '#00509d',
+                            backgroundColor: '#00509d',
+                            yAxisID: 'y1',
+                            fill: false
+                        },
+                        {
+                            label: 'Stress (N/cm²)',
+                            data: """ + str(df['stress_ncm2'].tolist()) + """,
+                            borderColor: '#cc0000',
+                            backgroundColor: '#cc0000',
+                            yAxisID: 'y2',
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Force and Stress Progression During Bend Test',
+                            color: '#003366',
+                            font: { size: 16 }
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: { color: '#003366' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time (s)',
+                                color: '#003366'
+                            },
+                            grid: { color: '#a3c6f0' },
+                            ticks: { color: '#003366' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Force (N)',
+                                color: '#00509d'
+                            },
+                            grid: { color: '#a3c6f0' },
+                            ticks: { color: '#00509d' }
+                        },
+                        y2: {
+                            type: 'linear',
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Stress (N/cm²)',
+                                color: '#cc0000'
+                            },
+                            grid: { display: false },
+                            ticks: { color: '#cc0000' }
+                        }
+                    }
+                }
+            });
+            </script>
+            """, unsafe_allow_html=True)
             
-            # Force plot (left axis)
-            color = 'tab:blue'
-            ax1.set_xlabel('Time (s)')
-            ax1.set_ylabel('Force (N)', color=color)
-            ax1.plot(df.index, df['force'].abs(), color=color, label='Force')
-            ax1.axhline(y=max_force, color=color, linestyle='--', label='Max Force')
-            ax1.tick_params(axis='y', labelcolor=color)
-            ax1.grid(True)
-            
-            # Stress plot (right axis)
-            ax2 = ax1.twinx()
-            color = 'tab:red'
-            ax2.set_ylabel('Stress (N/cm²)', color=color)
-            ax2.plot(df.index, df['stress_ncm2'], color=color, label='Stress')
-            ax2.axhline(y=max_stress_ncm2, color=color, linestyle='--', label='Max Stress')
-            ax2.tick_params(axis='y', labelcolor=color)
-            
-            # Add legends
-            lines1, labels1 = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
-            
-            plt.title('Force and Stress Progression During Bend Test')
-            st.pyplot(fig)
-            
-            # Generate Excel report in Brafe template format
+            # Generate Excel report
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Create summary sheet
                 summary_df = pd.DataFrame({
                     'Parameter': ['Test Date', 'Operator', 'Test ID', 'Part ID', 'Job No',
                                  'Support Span (mm)', 'Width (mm)', 'Height (mm)',
@@ -317,14 +355,9 @@ with tab2:
                              max_force, max_stress_ncm2, status]
                 })
                 summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
-                
-                # Create data sheet
                 df.to_excel(writer, sheet_name='Raw Data')
                 
-                # Formatting
                 workbook = writer.book
-                
-                # Summary sheet formatting
                 summary_sheet = writer.sheets['Test Summary']
                 header_format = workbook.add_format({
                     'bold': True,
@@ -341,11 +374,9 @@ with tab2:
                     'font_color': '#721c24'
                 })
                 
-                # Apply header formatting
                 for col_num, value in enumerate(summary_df.columns.values):
                     summary_sheet.write(0, col_num, value, header_format)
                 
-                # Apply conditional formatting to status
                 status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
                 if status == "✅ Pass":
                     summary_sheet.conditional_format(f'B{status_row+1}', {
@@ -362,17 +393,14 @@ with tab2:
                         'format': fail_format
                     })
                 
-                # Raw data sheet formatting
                 raw_sheet = writer.sheets['Raw Data']
                 for col_num, value in enumerate(df.reset_index().columns.values):
                     raw_sheet.write(0, col_num, value, header_format)
                 
-                # Set column widths
                 summary_sheet.set_column('A:A', 25)
                 summary_sheet.set_column('B:B', 20)
                 raw_sheet.set_column('A:Z', 15)
             
-            # Download button
             st.download_button(
                 label="Download Excel Report",
                 data=output.getvalue(),
@@ -394,17 +422,17 @@ with tab2:
             **Required CSV Format:**
             - Must have exactly 6 columns
             - Columns must contain (in order):
-              1. Force measurements
+              1. Force (unused)
               2. Point index
-              3. Position
+              3. Position (force in kN)
               4. Time
               5. X-axis measure
               6. Y-axis measure
               
             **Filename Format:**
-            - Must follow pattern: `..._XXXXXXXX(JJJ).csv`
-            - Where `XXXXXXXX` = Part ID
-            - Where `JJJ` = Job Number
+            - Must follow pattern: ..._XXXXXXXX(JJJ).csv
+            - Where XXXXXXXX = Part ID
+            - Where JJJ = Job Number
             """)
 
 with tab3:
@@ -462,10 +490,8 @@ with tab3:
                 - > 2.5%: Excessive binder
                 """)
                 
-                # Generate Excel report in Brafe template format
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    # Create summary sheet
                     summary_df = pd.DataFrame({
                         'Parameter': ['Test Date', 'Operator', 'Test ID', 
                                      'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
@@ -477,11 +503,8 @@ with tab3:
                     })
                     summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
                     
-                    # Formatting
                     workbook = writer.book
                     summary_sheet = writer.sheets['Test Summary']
-                    
-                    # Formatting
                     header_format = workbook.add_format({
                         'bold': True,
                         'bg_color': '#003366',
@@ -497,11 +520,9 @@ with tab3:
                         'font_color': '#721c24'
                     })
                     
-                    # Apply header formatting
                     for col_num, value in enumerate(summary_df.columns.values):
                         summary_sheet.write(0, col_num, value, header_format)
                     
-                    # Apply conditional formatting to status
                     status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
                     if status == "✅ Pass":
                         summary_sheet.conditional_format(f'B{status_row+1}', {
@@ -518,14 +539,9 @@ with tab3:
                             'format': fail_format
                         })
                     
-                    # Add Brafe logo
-                    # summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
-                    
-                    # Set column widths
                     summary_sheet.set_column('A:A', 25)
                     summary_sheet.set_column('B:B', 20)
                 
-                # Download button
                 st.download_button(
                     label="Download Excel Report",
                     data=output.getvalue(),
@@ -551,7 +567,7 @@ with tab3:
     ''')
     st.caption("Note: Algebraic signs are not considered in calculations (per manual section 3.5)")
 
-# Footer with Brafe branding
+# Footer
 st.divider()
 st.caption("""
 **Quality Control Manual Reference:** PDB_02P06PDBQL2 (Version 0001, Dec 2022) 
