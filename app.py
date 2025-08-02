@@ -6,6 +6,7 @@ from PIL import Image
 import base64
 from io import BytesIO
 import datetime
+import re
 
 # Load measurement images and Brafe logo
 x_img = Image.open('x_measurement.png')
@@ -233,125 +234,163 @@ with tab2:
     
     if bend_file is not None:
         try:
-            # Parse the uploaded CSV file
-            df = pd.read_csv(bend_file)
-            if 'force' not in df.columns or 'time' not in df.columns:
-                st.warning("CSV file must contain 'force' and 'time' columns")
-            else:
-                df['abs_force'] = df['force'].abs()
-                max_force = df['abs_force'].max()
+            # Try to read CSV with automatic delimiter detection
+            df = pd.read_csv(bend_file, sep=None, engine='python')
+            
+            # Show data preview
+            with st.expander("Preview of uploaded data"):
+                st.dataframe(df.head())
+            
+            # Identify force and time columns using pattern matching
+            force_col = None
+            time_col = None
+            
+            # Try to find columns that match force/time patterns
+            for col in df.columns:
+                col_lower = col.lower()
+                if 'force' in col_lower or 'load' in col_lower or 'f' in col_lower:
+                    force_col = col
+                if 'time' in col_lower or 'sec' in col_lower or 't' in col_lower:
+                    time_col = col
+            
+            # If columns not found, let user select
+            if force_col is None or time_col is None:
+                st.warning("Could not automatically identify force and time columns.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    force_col = st.selectbox("Select Force Column", df.columns)
+                with col2:
+                    time_col = st.selectbox("Select Time Column", df.columns)
                 
-                bending_strength_mpa = (3 * max_force * support_span) / (2 * width * height**2)
-                bending_strength_ncm2 = bending_strength_mpa * 100
+                if not st.button("Confirm Selection"):
+                    st.stop()
+            
+            # Process the data
+            df = df.rename(columns={force_col: 'force', time_col: 'time'})
+            df['abs_force'] = df['force'].abs()
+            max_force = df['abs_force'].max()
+            
+            # Calculate bending strength
+            bending_strength_mpa = (3 * max_force * support_span) / (2 * width * height**2)
+            bending_strength_ncm2 = bending_strength_mpa * 100
+            
+            status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
+            
+            # Display results
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Maximum Force", f"{max_force:.2f} N")
+            col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
+            col3.metric("Quality Status", status, 
+                       delta=f"Target: 260 N/cm²", 
+                       delta_color="normal")
+            
+            # Create force progression plot
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(df['time'], df['abs_force'], 'b-', label='Force')
+            ax.axhline(y=max_force, color='r', linestyle='--', label='Max Force')
+            ax.set_title('Force Progression During Bend Test')
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Force (N)')
+            ax.grid(True)
+            ax.legend()
+            st.pyplot(fig)
+            
+            # Generate Excel report in Brafe template format
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # Create summary sheet
+                summary_df = pd.DataFrame({
+                    'Parameter': ['Test Date', 'Operator', 'Test ID', 
+                                 'Support Span (mm)', 'Width (mm)', 'Height (mm)',
+                                 'Max Force (N)', 'Bending Strength (N/cm²)', 'Status'],
+                    'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 'Operator Name', 'TEST-001',
+                             support_span, width, height,
+                             max_force, bending_strength_ncm2, status]
+                })
+                summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
                 
-                status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
+                # Create data sheet
+                df.to_excel(writer, sheet_name='Raw Data', index=False)
                 
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Maximum Force", f"{max_force:.2f} N")
-                col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
-                col3.metric("Quality Status", status, 
-                           delta=f"Target: 260 N/cm²", 
-                           delta_color="normal")
+                # Formatting
+                workbook = writer.book
                 
-                fig, ax = plt.subplots(figsize=(10, 4))
-                ax.plot(df['time'], df['abs_force'], 'b-', label='Force')
-                ax.axhline(y=max_force, color='r', linestyle='--', label='Max Force')
-                ax.set_title('Force Progression During Bend Test')
-                ax.set_xlabel('Time (s)')
-                ax.set_ylabel('Force (N)')
-                ax.grid(True)
-                ax.legend()
-                st.pyplot(fig)
+                # Summary sheet formatting
+                summary_sheet = writer.sheets['Test Summary']
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'bg_color': '#003366',
+                    'font_color': 'white',
+                    'border': 1
+                })
+                pass_format = workbook.add_format({
+                    'bg_color': '#d4edda',
+                    'font_color': '#155724'
+                })
+                fail_format = workbook.add_format({
+                    'bg_color': '#f8d7da',
+                    'font_color': '#721c24'
+                })
                 
-                # Generate Excel report in Brafe template format
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    # Create summary sheet
-                    summary_df = pd.DataFrame({
-                        'Parameter': ['Test Date', 'Operator', 'Test ID', 
-                                     'Support Span (mm)', 'Width (mm)', 'Height (mm)',
-                                     'Max Force (N)', 'Bending Strength (N/cm²)', 'Status'],
-                        'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 'Operator Name', 'TEST-001',
-                                 support_span, width, height,
-                                 max_force, bending_strength_ncm2, status]
+                # Apply header formatting
+                for col_num, value in enumerate(summary_df.columns.values):
+                    summary_sheet.write(0, col_num, value, header_format)
+                
+                # Apply conditional formatting to status
+                status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
+                if status == "✅ Pass":
+                    summary_sheet.conditional_format(f'B{status_row+1}', {
+                        'type': 'cell',
+                        'criteria': '==',
+                        'value': '"✅ Pass"',
+                        'format': pass_format
                     })
-                    summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
-                    
-                    # Create data sheet
-                    df.to_excel(writer, sheet_name='Raw Data', index=False)
-                    
-                    # Formatting
-                    workbook = writer.book
-                    
-                    # Summary sheet formatting
-                    summary_sheet = writer.sheets['Test Summary']
-                    header_format = workbook.add_format({
-                        'bold': True,
-                        'bg_color': '#003366',
-                        'font_color': 'white',
-                        'border': 1
+                else:
+                    summary_sheet.conditional_format(f'B{status_row+1}', {
+                        'type': 'cell',
+                        'criteria': '==',
+                        'value': '"❌ Fail"',
+                        'format': fail_format
                     })
-                    pass_format = workbook.add_format({
-                        'bg_color': '#d4edda',
-                        'font_color': '#155724'
-                    })
-                    fail_format = workbook.add_format({
-                        'bg_color': '#f8d7da',
-                        'font_color': '#721c24'
-                    })
-                    
-                    # Apply header formatting
-                    for col_num, value in enumerate(summary_df.columns.values):
-                        summary_sheet.write(0, col_num, value, header_format)
-                    
-                    # Apply conditional formatting to status
-                    status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
-                    if status == "✅ Pass":
-                        summary_sheet.conditional_format(f'B{status_row+1}', {
-                            'type': 'cell',
-                            'criteria': '==',
-                            'value': '"✅ Pass"',
-                            'format': pass_format
-                        })
-                    else:
-                        summary_sheet.conditional_format(f'B{status_row+1}', {
-                            'type': 'cell',
-                            'criteria': '==',
-                            'value': '"❌ Fail"',
-                            'format': fail_format
-                        })
-                    
-                    # Add Brafe logo
-                    summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
-                    
-                    # Raw data sheet formatting
-                    raw_sheet = writer.sheets['Raw Data']
-                    for col_num, value in enumerate(df.columns.values):
-                        raw_sheet.write(0, col_num, value, header_format)
-                    
-                    # Set column widths
-                    summary_sheet.set_column('A:A', 25)
-                    summary_sheet.set_column('B:B', 20)
-                    raw_sheet.set_column('A:Z', 15)
                 
-                # Download button
-                st.download_button(
-                    label="Download Excel Report",
-                    data=output.getvalue(),
-                    file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                # Add Brafe logo
+                # summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
                 
-                if bending_strength_ncm2 < 260:
-                    st.warning("""
-                    **Recommendations to Increase Strength:**
-                    - Place parts in oven at 140°C for 3 hours
-                    - Increase binder amount
-                    - Extend rest period before testing
-                    """)
+                # Raw data sheet formatting
+                raw_sheet = writer.sheets['Raw Data']
+                for col_num, value in enumerate(df.columns.values):
+                    raw_sheet.write(0, col_num, value, header_format)
+                
+                # Set column widths
+                summary_sheet.set_column('A:A', 25)
+                summary_sheet.set_column('B:B', 20)
+                raw_sheet.set_column('A:Z', 15)
+            
+            # Download button
+            st.download_button(
+                label="Download Excel Report",
+                data=output.getvalue(),
+                file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+            if bending_strength_ncm2 < 260:
+                st.warning("""
+                **Recommendations to Increase Strength:**
+                - Place parts in oven at 140°C for 3 hours
+                - Increase binder amount
+                - Extend rest period before testing
+                """)
                     
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
+            st.info("""
+            **Troubleshooting Tips:**
+            1. Ensure your CSV file has headers
+            2. Confirm it contains force and time data
+            3. Check the file isn't corrupted
+            4. Try exporting data in standard CSV format
+            """)
 
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
@@ -465,7 +504,7 @@ with tab3:
                         })
                     
                     # Add Brafe logo
-                    summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
+                    # summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
                     
                     # Set column widths
                     summary_sheet.set_column('A:A', 25)
