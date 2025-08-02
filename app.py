@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import datetime
@@ -65,7 +66,8 @@ st.markdown(
 
 # Sidebar with Brafe branding
 with st.sidebar:
-    st.image("brafe_logo.png", width=150)  # Replace with actual logo path
+    # st.image("brafe_logo.png", width=150)  # Replace with actual logo path or URL
+    st.markdown("**Brafe Logo Placeholder**")  # Temporary placeholder
     st.header("Brafe Engineering Resources")
     st.markdown("[Quality Control Manual](https://www.brafeengineering.com/support/)")
     st.markdown("[Technical Support](mailto:support@brafeengineering.com)")
@@ -91,13 +93,16 @@ with tab1:
     with st.expander("📏 Measurement Instructions", expanded=True):
         cols = st.columns(3)
         with cols[0]:
-            st.image("x_img.png", caption="Measure Dimension X (Length)", use_container_width=True)  # Replace with actual image path
+            # st.image("x_img.png", caption="Measure Dimension X (Length)", use_container_width=True)  # Replace with actual image path or URL
+            st.markdown("**Image Placeholder: Measure Dimension X (Length)**")  # Temporary placeholder
             st.info("**X-Dimension:**\n- Length direction\n- Nominal: 172 mm")
         with cols[1]:
-            st.image("y_img.png", caption="Measure Dimension Y (Width)", use_container_width=True)  # Replace with actual image path
+            # st.image("y_img.png", caption="Measure Dimension Y (Width)", use_container_width=True)  # Replace with actual image path or URL
+            st.markdown("**Image Placeholder: Measure Dimension Y (Width)**")  # Temporary placeholder
             st.info("**Y-Dimension:**\n- Width direction\n- Nominal: 22.4 mm")
         with cols[2]:
-            st.image("z_img.png", caption="Measure Dimension Z (Height)", use_container_width=True)  # Replace with actual image path
+            # st.image("z_img.png", caption="Measure Dimension Z (Height)", use_container_width=True)  # Replace with actual image path or URL
+            st.markdown("**Image Placeholder: Measure Dimension Z (Height)**")  # Temporary placeholder
             st.info("**Z-Dimension:**\n- Height direction\n- Nominal: 22.4 mm")
         
         st.markdown("""
@@ -261,86 +266,96 @@ with tab2:
             st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
             
             # Create Chart.js plot
-            st.markdown("""
-            <div id="chart-container"></div>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-            <script>
-            const ctx = document.createElement('canvas');
-            document.getElementById('chart-container').appendChild(ctx);
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: """ + str(df.index.tolist()) + """,
-                    datasets: [
+            ```chartjs
+            {
+                "type": "line",
+                "data": {
+                    "labels": ${df.index.tolist()},
+                    "datasets": [
                         {
-                            label: 'Force (N)',
-                            data: """ + str(df['force_n'].abs().tolist()) + """,
-                            borderColor: '#00509d',
-                            backgroundColor: '#00509d',
-                            yAxisID: 'y1',
-                            fill: false
+                            "label": "Force (N)",
+                            "data": ${df['force_n'].abs().tolist()},
+                            "borderColor": "#00509d",
+                            "backgroundColor": "#00509d",
+                            "yAxisID": "y1",
+                            "fill": false
                         },
                         {
-                            label: 'Stress (N/cm²)',
-                            data: """ + str(df['stress_ncm2'].tolist()) + """,
-                            borderColor: '#cc0000',
-                            backgroundColor: '#cc0000',
-                            yAxisID: 'y2',
-                            fill: false
+                            "label": "Stress (N/cm²)",
+                            "data": ${df['stress_ncm2'].tolist()},
+                            "borderColor": "#cc0000",
+                            "backgroundColor": "#cc0000",
+                            "yAxisID": "y2",
+                            "fill": false
                         }
                     ]
                 },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Force and Stress Progression During Bend Test',
-                            color: '#003366',
-                            font: { size: 16 }
+                "options": {
+                    "responsive": true,
+                    "plugins": {
+                        "title": {
+                            "display": true,
+                            "text": "Force and Stress Progression During Bend Test",
+                            "color": "#003366",
+                            "font": {
+                                "size": 16
+                            }
                         },
-                        legend: {
-                            position: 'top',
-                            labels: { color: '#003366' }
+                        "legend": {
+                            "position": "top",
+                            "labels": {
+                                "color": "#003366"
+                            }
                         }
                     },
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Time (s)',
-                                color: '#003366'
+                    "scales": {
+                        "x": {
+                            "title": {
+                                "display": true,
+                                "text": "Time (s)",
+                                "color": "#003366"
                             },
-                            grid: { color: '#a3c6f0' },
-                            ticks: { color: '#003366' }
+                            "grid": {
+                                "color": "#a3c6f0"
+                            },
+                            "ticks": {
+                                "color": "#003366"
+                            }
                         },
-                        y1: {
-                            type: 'linear',
-                            position: 'left',
-                            title: {
-                                display: true,
-                                text: 'Force (N)',
-                                color: '#00509d'
+                        "y1": {
+                            "type": "linear",
+                            "position": "left",
+                            "title": {
+                                "display": true,
+                                "text": "Force (N)",
+                                "color": "#00509d"
                             },
-                            grid: { color: '#a3c6f0' },
-                            ticks: { color: '#00509d' }
+                            "grid": {
+                                "color": "#a3c6f0"
+                            },
+                            "ticks": {
+                                "color": "#00509d"
+                            }
                         },
-                        y2: {
-                            type: 'linear',
-                            position: 'right',
-                            title: {
-                                display: true,
-                                text: 'Stress (N/cm²)',
-                                color: '#cc0000'
+                        "y2": {
+                            "type": "linear",
+                            "position": "right",
+                            "title": {
+                                "display": true,
+                                "text": "Stress (N/cm²)",
+                                "color": "#cc0000"
                             },
-                            grid: { display: false },
-                            ticks: { color: '#cc0000' }
+                            "grid": {
+                                "display": false
+                            },
+                            "ticks": {
+                                "color": "#cc0000"
+                            }
                         }
                     }
                 }
-            });
-            </script>
-            """, unsafe_allow_html=True)
+            }
+            ```
             
             # Generate Excel report
             output = BytesIO()
@@ -546,29 +561,4 @@ with tab3:
                     label="Download Excel Report",
                     data=output.getvalue(),
                     file_name=f"Brafe_LOI_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                
-                if "Bunsen" in method:
-                    st.caption("Bunsen Burner Method Notes:\n- Burn until sand turns white\n- Stir every minute\n- Cool for 20 min before weighing")
-                else:
-                    st.caption("Oven Method Notes:\n- Heat to 900°C for 3 hours\n- Cool in closed oven before weighing")
-                    
-            except Exception as e:
-                st.error(f"Calculation error: {str(e)}")
-    
-    st.divider()
-    st.subheader("LOI Formula Reference")
-    st.latex(r'''
-    \begin{align*}
-    \Delta m &= (|T2| - |T1|) - W1 \\
-    LOI (\%) &= \left( \frac{|\Delta m|}{W1} \right) \times 100
-    \end{align*}
-    ''')
-    st.caption("Note: Algebraic signs are not considered in calculations (per manual section 3.5)")
-
-# Footer
-st.divider()
-st.caption("""
-**Quality Control Manual Reference:** PDB_02P06PDBQL2 (Version 0001, Dec 2022) 
-""")
+                    mime="application/vnd.openxmlformats-offic
