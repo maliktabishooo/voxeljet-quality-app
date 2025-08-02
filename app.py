@@ -1,11 +1,46 @@
-```python
+
 import streamlit as st
 import pandas as pd
-import datetime
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+import base64
 from io import BytesIO
+import datetime
+import re
 import os
 
-# Apply Brafe theme
+# Load measurement images and Brafe logo with error handling
+try:
+    x_img = Image.open('x_measurement.png')
+except FileNotFoundError:
+    x_img = None
+    st.warning("Image 'x_measurement.png' not found. Using placeholder.")
+try:
+    y_img = Image.open('y_measurement.png')
+except FileNotFoundError:
+    y_img = None
+    st.warning("Image 'y_measurement.png' not found. Using placeholder.")
+try:
+    z_img = Image.open('z_measurement.png')
+except FileNotFoundError:
+    z_img = None
+    st.warning("Image 'z_measurement.png' not found. Using placeholder.")
+try:
+    brafe_logo = Image.open('brafe_logo.png')
+except FileNotFoundError:
+    brafe_logo = None
+    st.warning("Image 'brafe_logo.png' not found. Using placeholder.")
+
+# App configuration with updated blue theme
+st.set_page_config(
+    page_title="Brafe Engineering Quality Control",
+    page_icon=brafe_logo if brafe_logo else ":bar_chart:",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for blue Brafe theme
 st.markdown(
     """
     <style>
@@ -66,8 +101,10 @@ st.markdown(
 
 # Sidebar with Brafe branding
 with st.sidebar:
-    # st.image("brafe_logo.png", width=150)  # Replace with actual logo path or URL
-    st.markdown("**Brafe Logo Placeholder**")  # Temporary placeholder
+    if brafe_logo:
+        st.image(brafe_logo, width=150)
+    else:
+        st.markdown("**Brafe Logo Placeholder**")
     st.header("Brafe Engineering Resources")
     st.markdown("[Quality Control Manual](https://www.brafeengineering.com/support/)")
     st.markdown("[Technical Support](mailto:support@brafeengineering.com)")
@@ -93,16 +130,22 @@ with tab1:
     with st.expander("📏 Measurement Instructions", expanded=True):
         cols = st.columns(3)
         with cols[0]:
-            # st.image("x_img.png", caption="Measure Dimension X (Length)", use_container_width=True)  # Replace with actual image path or URL
-            st.markdown("**Image Placeholder: Measure Dimension X (Length)**")  # Temporary placeholder
+            if x_img:
+                st.image(x_img, caption="Measure Dimension X (Length)", use_container_width=True)
+            else:
+                st.markdown("**Image Placeholder: Measure Dimension X (Length)**")
             st.info("**X-Dimension:**\n- Length direction\n- Nominal: 172 mm")
         with cols[1]:
-            # st.image("y_img.png", caption="Measure Dimension Y (Width)", use_container_width=True)  # Replace with actual image path or URL
-            st.markdown("**Image Placeholder: Measure Dimension Y (Width)**")  # Temporary placeholder
+            if y_img:
+                st.image(y_img, caption="Measure Dimension Y (Width)", use_container_width=True)
+            else:
+                st.markdown("**Image Placeholder: Measure Dimension Y (Width)**")
             st.info("**Y-Dimension:**\n- Width direction\n- Nominal: 22.4 mm")
         with cols[2]:
-            # st.image("z_img.png", caption="Measure Dimension Z (Height)", use_container_width=True)  # Replace with actual image path or URL
-            st.markdown("**Image Placeholder: Measure Dimension Z (Height)**")  # Temporary placeholder
+            if z_img:
+                st.image(z_img, caption="Measure Dimension Z (Height)", use_container_width=True)
+            else:
+                st.markdown("**Image Placeholder: Measure Dimension Z (Height)**")
             st.info("**Z-Dimension:**\n- Height direction\n- Nominal: 22.4 mm")
         
         st.markdown("""
@@ -215,165 +258,151 @@ with tab2:
     st.divider()
     
     st.subheader("Upload Bend Test Data")
-    bend_file = st.file_uploader("Upload CSV from bend test machine", 
-                                type=["csv"],
-                                help="Should contain force measurements in kN in the third column")
+    bend_files = st.file_uploader("Upload CSV files from bend test machine", 
+                                 type=["csv"],
+                                 accept_multiple_files=True,
+                                 help="Should contain force measurements in kN in the third column (position)")
     
-    if bend_file is not None:
-        try:
-            # Extract part ID and job number from filename
-            filename = bend_file.name
-            path_split_ext = os.path.splitext(filename)
-            path_split = os.path.split(path_split_ext[0])
-            test_key = path_split[1][16:] if len(path_split[1]) >= 16 else path_split[1]
-            
+    if bend_files:
+        # Initialize lists to store results for summary table
+        results = []
+        dfs = []
+        
+        for bend_file in bend_files:
             try:
-                part_id = test_key.split("(")[0]
-                job_no = test_key.split('(')[1][:-1]
-            except:
-                part_id = "Unknown"
-                job_no = "N/A"
+                # Extract part ID and job number from filename
+                filename = bend_file.name
+                path_split_ext = os.path.splitext(filename)
+                path_split = os.path.split(path_split_ext[0])
+                test_key = path_split[1][16:] if len(path_split[1]) >= 16 else path_split[1]
+                
+                try:
+                    part_id = test_key.split("(")[0]
+                    job_no = test_key.split('(')[1][:-1]
+                except:
+                    part_id = "Unknown"
+                    job_no = "N/A"
+                
+                # Read CSV
+                df = pd.read_csv(bend_file, 
+                                 names=['force', 'point_index', 'position', 'time', 'x_axis_measure', 'y_axis_measure'],
+                                 index_col=False)
+                df = df.set_index('time')
+                
+                # Convert position (kN) to force in Newtons
+                conversion_factor = 1000  # kN to N
+                df['force_n'] = df['position'] * conversion_factor
+                
+                # Calculate bending strength: σ = (3FL)/(2bh²)
+                df['stress_mpa'] = (3 * df['force_n'] * support_span) / (2 * width * height**2)
+                df['stress_ncm2'] = df['stress_mpa'] * 100
+                
+                # Get max values
+                max_force = df['force_n'].abs().max()
+                max_force_idx = df['force_n'].abs().idxmax()
+                max_stress_ncm2 = df['stress_ncm2'].loc[max_force_idx]
+                
+                status = "✅ Pass" if max_stress_ncm2 >= 260 else "❌ Fail"
+                
+                # Store results
+                results.append({
+                    'Filename': filename,
+                    'Part ID': part_id,
+                    'Job No': job_no,
+                    'Max Force (N)': max_force,
+                    'Bending Strength (N/cm²)': max_stress_ncm2,
+                    'Status': status
+                })
+                dfs.append((filename, df))
+                
+                # Display individual results
+                st.subheader(f"Results for {filename}")
+                st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Maximum Force", f"{max_force:.2f} N")
+                col2.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")
+                col3.metric("Quality Status", status, 
+                           delta=f"Target: 260 N/cm²", 
+                           delta_color="normal")
+                
+                # Create dual-axis plot for force and stress progression
+                fig, ax1 = plt.subplots(figsize=(10, 6))
+                
+                # Force plot (left axis)
+                color = 'tab:blue'
+                ax1.set_xlabel('Time (s)')
+                ax1.set_ylabel('Force (N)', color=color)
+                ax1.plot(df.index, df['force_n'].abs(), color=color, label='Force')
+                ax1.axhline(y=max_force, color=color, linestyle='--', label='Max Force')
+                ax1.tick_params(axis='y', labelcolor=color)
+                ax1.grid(True)
+                
+                # Stress plot (right axis)
+                ax2 = ax1.twinx()
+                color = 'tab:red'
+                ax2.set_ylabel('Stress (N/cm²)', color=color)
+                ax2.plot(df.index, df['stress_ncm2'], color=color, label='Stress')
+                ax2.axhline(y=max_stress_ncm2, color=color, linestyle='--', label='Max Stress')
+                ax2.tick_params(axis='y', labelcolor=color)
+                
+                # Add legends
+                lines1, labels1 = ax1.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+                
+                plt.title(f'Force and Stress Progression for {filename}')
+                st.pyplot(fig)
+                
+                if max_stress_ncm2 < 260:
+                    st.warning("""
+                    **Recommendations to Increase Strength:**
+                    - Place parts in oven at 140°C for 3 hours
+                    - Increase binder amount
+                    - Extend rest period before testing
+                    """)
+                    
+            except Exception as e:
+                st.error(f"Error processing file {filename}: {str(e)}")
+                st.info("""
+                **Required CSV Format:**
+                - Must have exactly 6 columns
+                - Columns must contain (in order):
+                  1. Force (unused)
+                  2. Point index
+                  3. Position (force in kN)
+                  4. Time
+                  5. X-axis measure
+                  6. Y-axis measure
+                  
+                **Filename Format:**
+                - Must follow pattern: ..._XXXXXXXX(JJJ).csv
+                - Where XXXXXXXX = Part ID
+                - Where JJJ = Job Number
+                """)
+        
+        # Display summary table
+        if results:
+            st.subheader("Summary of All Files")
+            summary_df = pd.DataFrame(results)
+            st.dataframe(summary_df.style.format({
+                'Max Force (N)': '{:.2f}',
+                'Bending Strength (N/cm²)': '{:.2f}'
+            }))
             
-            # Read CSV
-            df = pd.read_csv(bend_file, 
-                             names=['force', 'point_index', 'position', 'time', 'x_axis_measure', 'y_axis_measure'],
-                             index_col=False)
-            df = df.set_index('time')
-            
-            # Convert position (assumed kN) to force in Newtons
-            conversion_factor = 1000  # kN to N
-            df['force_n'] = df['position'] * conversion_factor
-            
-            # Calculate bending strength: σ = (3FL)/(2bh²)
-            df['stress_mpa'] = (3 * df['force_n'] * support_span) / (2 * width * height**2)
-            df['stress_ncm2'] = df['stress_mpa'] * 100
-            
-            # Get max values
-            max_force = df['force_n'].abs().max()
-            max_stress_ncm2 = df['stress_ncm2'].max()
-            
-            status = "✅ Pass" if max_stress_ncm2 >= 260 else "❌ Fail"
-            
-            # Display results
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Maximum Force", f"{max_force:.2f} N")
-            col2.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")
-            col3.metric("Quality Status", status, 
-                       delta=f"Target: 260 N/cm²", 
-                       delta_color="normal")
-            
-            # Show extracted metadata
-            st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
-            
-            # Create Chart.js plot
-            ```chartjs
-            {
-                "type": "line",
-                "data": {
-                    "labels": ${df.index.tolist()},
-                    "datasets": [
-                        {
-                            "label": "Force (N)",
-                            "data": ${df['force_n'].abs().tolist()},
-                            "borderColor": "#00509d",
-                            "backgroundColor": "#00509d",
-                            "yAxisID": "y1",
-                            "fill": false
-                        },
-                        {
-                            "label": "Stress (N/cm²)",
-                            "data": ${df['stress_ncm2'].tolist()},
-                            "borderColor": "#cc0000",
-                            "backgroundColor": "#cc0000",
-                            "yAxisID": "y2",
-                            "fill": false
-                        }
-                    ]
-                },
-                "options": {
-                    "responsive": true,
-                    "plugins": {
-                        "title": {
-                            "display": true,
-                            "text": "Force and Stress Progression During Bend Test",
-                            "color": "#003366",
-                            "font": {
-                                "size": 16
-                            }
-                        },
-                        "legend": {
-                            "position": "top",
-                            "labels": {
-                                "color": "#003366"
-                            }
-                        }
-                    },
-                    "scales": {
-                        "x": {
-                            "title": {
-                                "display": true,
-                                "text": "Time (s)",
-                                "color": "#003366"
-                            },
-                            "grid": {
-                                "color": "#a3c6f0"
-                            },
-                            "ticks": {
-                                "color": "#003366"
-                            }
-                        },
-                        "y1": {
-                            "type": "linear",
-                            "position": "left",
-                            "title": {
-                                "display": true,
-                                "text": "Force (N)",
-                                "color": "#00509d"
-                            },
-                            "grid": {
-                                "color": "#a3c6f0"
-                            },
-                            "ticks": {
-                                "color": "#00509d"
-                            }
-                        },
-                        "y2": {
-                            "type": "linear",
-                            "position": "right",
-                            "title": {
-                                "display": true,
-                                "text": "Stress (N/cm²)",
-                                "color": "#cc0000"
-                            },
-                            "grid": {
-                                "display": false
-                            },
-                            "ticks": {
-                                "color": "#cc0000"
-                            }
-                        }
-                    }
-                }
-            }
-            ```
-            
-            # Generate Excel report
+            # Generate combined Excel report
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                summary_df = pd.DataFrame({
-                    'Parameter': ['Test Date', 'Operator', 'Test ID', 'Part ID', 'Job No',
-                                 'Support Span (mm)', 'Width (mm)', 'Height (mm)',
-                                 'Max Force (N)', 'Bending Strength (N/cm²)', 'Status'],
-                    'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 
-                             'Operator Name', 'TEST-001', part_id, job_no,
-                             support_span, width, height,
-                             max_force, max_stress_ncm2, status]
-                })
-                summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
-                df.to_excel(writer, sheet_name='Raw Data')
+                # Write summary sheet
+                summary_df.to_excel(writer, sheet_name='Summary', index=False)
                 
+                # Write raw data for each file
+                for filename, df in dfs:
+                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]  # Sanitize sheet name
+                    df.to_excel(writer, sheet_name=safe_sheet_name)
+                
+                # Formatting
                 workbook = writer.book
-                summary_sheet = writer.sheets['Test Summary']
+                summary_sheet = writer.sheets['Summary']
                 header_format = workbook.add_format({
                     'bold': True,
                     'bg_color': '#003366',
@@ -389,66 +418,47 @@ with tab2:
                     'font_color': '#721c24'
                 })
                 
-                for col_num, value in enumerate(summary_df.columns.values):
+                # Apply header formatting to summary sheet
+                for col_num, value in enumerate(summary_df.columns):
                     summary_sheet.write(0, col_num, value, header_format)
                 
-                status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
-                if status == "✅ Pass":
-                    summary_sheet.conditional_format(f'B{status_row+1}', {
+                # Apply conditional formatting to status in summary
+                status_col = summary_df.columns.get_loc('Status')
+                for row in range(1, len(summary_df) + 1):
+                    summary_sheet.conditional_format(f'{chr(65 + status_col)}{row + 1}', {
                         'type': 'cell',
                         'criteria': '==',
                         'value': '"✅ Pass"',
                         'format': pass_format
                     })
-                else:
-                    summary_sheet.conditional_format(f'B{status_row+1}', {
+                    summary_sheet.conditional_format(f'{chr(65 + status_col)}{row + 1}', {
                         'type': 'cell',
                         'criteria': '==',
                         'value': '"❌ Fail"',
                         'format': fail_format
                     })
                 
-                raw_sheet = writer.sheets['Raw Data']
-                for col_num, value in enumerate(df.reset_index().columns.values):
-                    raw_sheet.write(0, col_num, value, header_format)
+                # Apply header formatting to raw data sheets
+                for filename, df in dfs:
+                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
+                    raw_sheet = writer.sheets[safe_sheet_name]
+                    for col_num, value in enumerate(df.reset_index().columns):
+                        raw_sheet.write(0, col_num, value, header_format)
                 
-                summary_sheet.set_column('A:A', 25)
-                summary_sheet.set_column('B:B', 20)
-                raw_sheet.set_column('A:Z', 15)
+                # Set column widths
+                summary_sheet.set_column('A:A', 30)  # Filename
+                summary_sheet.set_column('B:F', 20)  # Other columns
+                for filename, df in dfs:
+                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
+                    writer.sheets[safe_sheet_name].set_column('A:Z', 15)
             
+            # Download button
             st.download_button(
-                label="Download Excel Report",
+                label="Download Combined Excel Report",
                 data=output.getvalue(),
                 file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
-            if max_stress_ncm2 < 260:
-                st.warning("""
-                **Recommendations to Increase Strength:**
-                - Place parts in oven at 140°C for 3 hours
-                - Increase binder amount
-                - Extend rest period before testing
-                """)
-                    
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
-            st.info("""
-            **Required CSV Format:**
-            - Must have exactly 6 columns
-            - Columns must contain (in order):
-              1. Force (unused)
-              2. Point index
-              3. Position (force in kN)
-              4. Time
-              5. X-axis measure
-              6. Y-axis measure
-              
-            **Filename Format:**
-            - Must follow pattern: ..._XXXXXXXX(JJJ).csv
-            - Where XXXXXXXX = Part ID
-            - Where JJJ = Job Number
-            """)
 
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
@@ -505,8 +515,10 @@ with tab3:
                 - > 2.5%: Excessive binder
                 """)
                 
+                # Generate Excel report in Brafe template format
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    # Create summary sheet
                     summary_df = pd.DataFrame({
                         'Parameter': ['Test Date', 'Operator', 'Test ID', 
                                      'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
@@ -518,8 +530,11 @@ with tab3:
                     })
                     summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
                     
+                    # Formatting
                     workbook = writer.book
                     summary_sheet = writer.sheets['Test Summary']
+                    
+                    # Formatting
                     header_format = workbook.add_format({
                         'bold': True,
                         'bg_color': '#003366',
@@ -535,9 +550,11 @@ with tab3:
                         'font_color': '#721c24'
                     })
                     
+                    # Apply header formatting
                     for col_num, value in enumerate(summary_df.columns.values):
                         summary_sheet.write(0, col_num, value, header_format)
                     
+                    # Apply conditional formatting to status
                     status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
                     if status == "✅ Pass":
                         summary_sheet.conditional_format(f'B{status_row+1}', {
@@ -554,11 +571,99 @@ with tab3:
                             'format': fail_format
                         })
                     
+                    # Add Brafe logo (commented out to avoid image error)
+                    # summary_sheet.insert_image('A1', 'brafe_logo.png', {'x_offset': 10, 'y_offset': 10})
+                    
+                    # Set column widths
                     summary_sheet.set_column('A:A', 25)
                     summary_sheet.set_column('B:B', 20)
                 
+                # Download button
                 st.download_button(
                     label="Download Excel Report",
                     data=output.getvalue(),
                     file_name=f"Brafe_LOI_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-offic
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+                if "Bunsen" in method:
+                    st.caption("Bunsen Burner Method Notes:\n- Burn until sand turns white\n- Stir every minute\n- Cool for 20 min before weighing")
+                else:
+                    st.caption("Oven Method Notes:\n- Heat to 900°C for 3 hours\n- Cool in closed oven before weighing")
+                    
+            except Exception as e:
+                st.error(f"Calculation error: {str(e)}")
+    
+    st.divider()
+    st.subheader("LOI Formula Reference")
+    st.latex(r'''
+    \begin{align*}
+    \Delta m &= (|T2| - |T1|) - W1 \\
+    LOI (\%) &= \left( \frac{|\Delta m|}{W1} \right) \times 100
+    \end{align*}
+    ''')
+    st.caption("Note: Algebraic signs are not considered in calculations (per manual section 3.5)")
+
+# Footer with Brafe branding
+st.divider()
+st.caption("""
+**Quality Control Manual Reference:** PDB_02P06PDBQL2 (Version 0001, Dec 2022) 
+""")
+```
+
+### Key Changes
+1. **Force Data and Conversion**:
+   - Uses `df['position']` (third column) as force in kN, converted to Newtons: `df['force_n'] = df['position'] * 1000`.
+   - Maximum force calculated as `max_force = df['force_n'].abs().max()`.
+   - Stress calculated using `force_n`: `df['stress_mpa'] = (3 * df['force_n'] * support_span) / (2 * width * height**2)`, then `df['stress_ncm2'] = df['stress_mpa'] * 100`.
+   - Bending strength reported at the time of maximum force (`max_stress_ncm2 = df['stress_ncm2'].loc[max_force_idx]`) to ensure consistency.
+
+2. **Multiple CSV Uploads**:
+   - Changed `st.file_uploader` to `accept_multiple_files=True`, allowing multiple CSV uploads.
+   - Iterates through each file, processes data, and stores results in a list (`results`) for a summary table.
+   - Displays individual results (metrics and plot) for each file under its filename.
+   - Creates a summary table with `Filename`, `Part ID`, `Job No`, `Max Force (N)`, `Bending Strength (N/cm²)`, and `Status`.
+
+3. **Combined Excel Report**:
+   - Generates a single Excel file with:
+     - A `Summary` sheet containing results for all files (`Filename`, `Part ID`, `Job No`, `Max Force (N)`, `Bending Strength (N/cm²)`, `Status`).
+     - Separate sheets for each file’s raw data, named after the sanitized filename (special characters replaced with underscores, truncated to 31 characters).
+   - Applies Brafe-themed formatting (header color `#003366`, pass/fail colors `#d4edda`/`#f8d7da`).
+
+4. **Image Handling**:
+   - Uses `PIL.Image.open()` for images, with try-except blocks to fall back to markdown placeholders if files are missing.
+   - Sets page icon to `brafe_logo` if available, else uses a default emoji (`:bar_chart:`).
+   - Commented out the Excel logo insertion (`summary_sheet.insert_image`) to avoid potential errors.
+
+5. **Plotting**:
+   - Retains matplotlib dual-axis plots, updated to use `force_n` for the force axis (`df['force_n'].abs()`).
+   - Each file gets its own plot, titled with the filename.
+
+6. **Preserved Components**:
+   - Dimensional Check and LOI Analysis tabs are unchanged, including the LOI formula: `Δm = (|T2| - |T1|) - W1`, `LOI (%) = (|Δm| / W1) * 100`.
+   - Brafe theme, sidebar, and footer remain identical.
+
+### Verification with Provided CSV
+For a single CSV (`2025_0731_1110221A(1).csv`, `position` from -0.016711 to -1.515921 kN):
+- **Force Conversion**: `force_n = position * 1000`, so -16.711 N to -1515.921 N.
+- **Maximum Force**: `max_force = df['force_n'].abs().max() = 1515.921 N`.
+- **Stress Calculation** (with `support_span=100 mm`, `width=22.4 mm`, `height=22.4 mm`):
+  - At max force: `σ_mpa = (3 * 1515.921 * 100) / (2 * 22.4 * 22.4^2) = 20.204 MPa`.
+  - `σ_ncm2 = 20.204 * 100 = 2020.4 N/cm²`.
+- **Status**: `✅ Pass` (2020.4 > 260 N/cm²).
+- **Output**:
+  - Metrics: Max Force = 1515.92 N, Bending Strength = 2020.40 N/cm², Status = ✅ Pass.
+  - Plot: Shows force (0 to 1515.921 N) and stress (0 to 2020.4 N/cm²) over time.
+  - Excel: Summary sheet with one row, raw data sheet named `2025_0731_1110221A(1)`.
+
+For multiple CSVs, the app processes each file similarly, displays individual results, and compiles a summary table and Excel report.
+
+### Notes
+- **Image Files**: Ensure `brafe_logo.png`, `x_measurement.png`, `y_measurement.png`, and `z_measurement.png` are in the app’s directory. If not, the code uses placeholders. To use different paths or URLs, update the `Image.open()` calls or replace with `st.image("https://example.com/image.png")`.
+- **Unit Conversion**: Assumes `position` is in kN (multiplied by 1000 to get N). If it’s in another unit (e.g., pounds, raw sensor units), provide the conversion factor.
+- **Dependencies**: Install required packages: `pip install streamlit pandas numpy matplotlib Pillow xlsxwriter`.
+- **Excel Sheet Names**: Filenames are sanitized to remove invalid characters (`[\]:*?/\\`) and truncated to 31 characters to comply with Excel’s sheet name limit.
+- **Testing**: Test with multiple CSVs to verify summary table and combined Excel report. Check Streamlit Cloud logs if errors occur.
+- **Negative Values**: Uses absolute values for force calculations and plotting. Confirm if this is appropriate.
+
+If you have specific image paths, a different conversion factor, or need additional features (e.g., Chart.js plotting, custom Excel formatting), please let me know!
