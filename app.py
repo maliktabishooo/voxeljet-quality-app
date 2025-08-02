@@ -237,30 +237,30 @@ with tab1:
 with tab2:
     st.header("3-Point Bend Test Analysis")
     st.caption("Calculate bending strength according to section 3.4 of Quality Control Manual")
-    
+
     with st.expander("⚙️ Test Parameters", expanded=True):
         # Hardcode test bar dimensions as per the manual
         support_span = 172.0
         width = 22.4
         height = 22.4
-        
+
         st.write(f"**Support Span (L):** {support_span} mm")
         st.write(f"**Width (b):** {width} mm")
         st.write(f"**Height (h):** {height} mm")
-    
+
     st.divider()
-    
+
     st.subheader("Upload Bend Test Data")
-    bend_files = st.file_uploader("Upload CSV files from bend test machine", 
-                                  type=["csv"],
-                                  accept_multiple_files=True,
-                                  help="Should contain force measurements in column 6 (y_axis_measure)")
-    
+    bend_files = st.file_uploader("Upload CSV files from bend test machine",
+                                    type=["csv"],
+                                    accept_multiple_files=True,
+                                    help="Should contain force measurements in column 1 (kN)")
+
     if bend_files:
         # Initialize lists to store results for summary table
         results = []
         dfs = []
-        
+
         for bend_file in bend_files:
             try:
                 # Extract part ID and job number from filename
@@ -268,111 +268,111 @@ with tab2:
                 path_split_ext = os.path.splitext(filename)
                 path_split = os.path.split(path_split_ext[0])
                 test_key = path_split[1][16:] if len(path_split[1]) >= 16 else path_split[1]
-                
+
                 try:
                     part_id = test_key.split("(")[0]
                     job_no = test_key.split('(')[1][:-1]
                 except:
                     part_id = "Unknown"
                     job_no = "N/A"
+
+                # Read CSV, specifying column names to match the file structure
+                df = pd.read_csv(bend_file,
+                                    names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
+                                    index_col=False)
                 
-                # Read CSV
-                df = pd.read_csv(bend_file, 
-                                 names=['force', 'point_index', 'position', 'time', 'x_axis_measure', 'y_axis_measure'],
-                                 index_col=False)
-                df = df.set_index('time')
+                # --- START OF CODE MODIFICATION ---
                 
-                # Use column 6 (y_axis_measure) as the force values (in Newtons)
-                # This matches Ben's original approach
-                df['force_n'] = df['y_axis_measure']
-                
+                # Use column 1 ('force_kn') as the force values and handle negative signs
+                max_force_kn = df['force_kn'].abs().max()
+
+                # Convert from kilonewtons (kN) to Newtons (N) for the formula
+                max_force_n = max_force_kn * 1000
+
                 # Calculate bending strength: σ = (3FL)/(2bh²)
-                df['stress_mpa'] = (3 * df['force_n'] * support_span) / (2 * width * height**2)
-                df['stress_ncm2'] = df['stress_mpa'] * 100
-                
-                # Get max values
-                max_force = df['force_n'].max()
-                max_force_idx = df['force_n'].idxmax()
-                max_stress_ncm2 = df['stress_ncm2'].loc[max_force_idx]
-                
-                status = "✅ Pass" if max_stress_ncm2 >= 260 else "❌ Fail"
-                
+                bending_strength_nmm2 = (3 * max_force_n * support_span) / (2 * width * height**2)
+                bending_strength_ncm2 = bending_strength_nmm2 * 100
+
+                # --- END OF CODE MODIFICATION ---
+
+                status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
+
                 # Store results
                 results.append({
                     'Filename': filename,
                     'Part ID': part_id,
                     'Job No': job_no,
-                    'Max Force (N)': max_force,
-                    'Bending Strength (N/cm^2)': max_stress_ncm2,
+                    'Max Force (N)': max_force_n,
+                    'Bending Strength (N/cm^2)': bending_strength_ncm2,
                     'Status': status
                 })
                 dfs.append((filename, df))
-                
+
                 # Display individual results
                 st.subheader(f"Results for {filename}")
                 st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
                 col1, col2, col3 = st.columns(3)
-                col1.metric("Maximum Force", f"{max_force:.2f} N")
-                col2.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")
-                col3.metric("Quality Status", status, 
-                            delta=f"Target: 260 N/cm²", 
-                            delta_color="normal")
-                
+                col1.metric("Maximum Force", f"{max_force_n:.2f} N")
+                col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
+                col3.metric("Quality Status", status,
+                                delta=f"Target: 260 N/cm²",
+                                delta_color="normal")
+
                 # Create dual-axis plot for force and stress progression
+                # You'll need to define force_n and stress_ncm2 to be able to plot this
+                # I've added the definitions for these above.
                 fig, ax1 = plt.subplots(figsize=(10, 6))
-                
+
                 # Force plot (left axis)
                 color = 'tab:blue'
                 ax1.set_xlabel('Time (s)')
                 ax1.set_ylabel('Force (N)', color=color)
-                ax1.plot(df.index, df['force_n'], color=color, label='Force')
-                ax1.axhline(y=max_force, color=color, linestyle='--', label='Max Force')
+                ax1.plot(df['time'], df['force_kn'].abs() * 1000, color=color, label='Force')
+                ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Force')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True)
-                
+
                 # Stress plot (right axis)
                 ax2 = ax1.twinx()
                 color = 'tab:red'
                 ax2.set_ylabel('Stress (N/cm²)', color=color)
-                ax2.plot(df.index, df['stress_ncm2'], color=color, label='Stress')
-                ax2.axhline(y=max_stress_ncm2, color=color, linestyle='--', label='Max Stress')
-                ax2.tick_params(axis='y', labelcolor=color)
                 
+                # Recalculate stress for the plot using the new force data
+                df['stress_ncm2'] = ((3 * (df['force_kn'].abs() * 1000) * support_span) / (2 * width * height**2)) * 100
+                ax2.plot(df['time'], df['stress_ncm2'], color=color, label='Stress')
+                ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
+                ax2.tick_params(axis='y', labelcolor=color)
+
                 # Add legends
                 lines1, labels1 = ax1.get_legend_handles_labels()
                 lines2, labels2 = ax2.get_legend_handles_labels()
                 ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
-                
+
                 plt.title(f'Force and Stress Progression for {filename}')
                 st.pyplot(fig)
-                
-                if max_stress_ncm2 < 260:
+
+                if bending_strength_ncm2 < 260:
                     st.warning("""
                     **Recommendations to Increase Strength:**
                     - Place parts in oven at 140°C for 3 hours
                     - Increase binder amount
                     - Extend rest period before testing
                     """)
-                    
+
             except Exception as e:
                 st.error(f"Error processing file {filename}: {str(e)}")
                 st.info("""
                 **Required CSV Format:**
                 - Must have exactly 6 columns
                 - Columns must contain (in order):
-                  1. Force (unused)
+                  1. Force (kN)
                   2. Point index
-                  3. Position
-                  4. Time
+                  3. Position (mm)
+                  4. Time (s)
                   5. X-axis measure
-                  6. Y-axis measure (force in Newtons)
-                  
-                **Filename Format:**
-                - Must follow pattern: ..._XXXXXXXX(JJJ).csv
-                - Where XXXXXXXX = Part ID
-                - Where JJJ = Job Number
+                  6. Y-axis measure
                 """)
-        
+
         # Display summary table
         if results:
             st.subheader("Summary of All Files")
@@ -381,19 +381,19 @@ with tab2:
                 'Max Force (N)': '{:.2f}',
                 'Bending Strength (N/cm^2)': '{:.2f}'
             }))
-            
+
             # Generate combined Excel report
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 # Write summary sheet
                 summary_df.to_excel(writer, sheet_name='Summary', index=False)
-                
+
                 # Write raw data for each file
                 for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]  # Sanitize sheet name
+                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
                     df.to_excel(writer, sheet_name=safe_sheet_name)
-                
-                # Formatting
+
+                # Formatting (unchanged)
                 workbook = writer.book
                 summary_sheet = writer.sheets['Summary']
                 header_format = workbook.add_format({
@@ -410,41 +410,29 @@ with tab2:
                     'bg_color': '#f8d7da',
                     'font_color': '#721c24'
                 })
-                
-                # Apply header formatting to summary sheet
+
                 for col_num, value in enumerate(summary_df.columns):
                     summary_sheet.write(0, col_num, value, header_format)
-                
-                # Apply conditional formatting to status in summary
+
                 status_col = summary_df.columns.get_loc('Status')
                 for row in range(1, len(summary_df) + 1):
-                    summary_sheet.conditional_format(f'{chr(65 + status_col)}{row + 1}', {
-                        'type': 'cell',
-                        'criteria': '==',
-                        'value': '"✅ Pass"',
-                        'format': pass_format
-                    })
-                    summary_sheet.conditional_format(f'{chr(65 + status_col)}{row + 1}', {
-                        'type': 'cell',
-                        'criteria': '==',
-                        'value': '"❌ Fail"',
-                        'format': fail_format
-                    })
-                
-                # Apply header formatting to raw data sheets
+                    status_value = summary_df.loc[row - 1, 'Status']
+                    if status_value == "✅ Pass":
+                        summary_sheet.write(row, status_col, status_value, pass_format)
+                    else:
+                        summary_sheet.write(row, status_col, status_value, fail_format)
+
                 for filename, df in dfs:
                     safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
                     raw_sheet = writer.sheets[safe_sheet_name]
-                    for col_num, value in enumerate(df.reset_index().columns):
-                        raw_sheet.write(0, col_num, value, header_format)
-                
-                # Set column widths
-                summary_sheet.set_column('A:A', 30)  # Filename
-                summary_sheet.set_column('B:F', 20)  # Other columns
+                    raw_sheet.write_row(0, 0, df.columns.values, header_format)
+
+                summary_sheet.set_column('A:A', 30)
+                summary_sheet.set_column('B:F', 20)
                 for filename, df in dfs:
                     safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
                     writer.sheets[safe_sheet_name].set_column('A:Z', 15)
-            
+
             # Download button
             st.download_button(
                 label="Download Combined Excel Report",
