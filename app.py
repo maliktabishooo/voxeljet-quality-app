@@ -254,7 +254,7 @@ with tab2:
     bend_files = st.file_uploader("Upload CSV files from bend test machine", 
                                   type=["csv"],
                                   accept_multiple_files=True,
-                                  help="Should contain force measurements in kN in the first column")
+                                  help="Should contain force measurements in column 6 (y_axis_measure)")
     
     if bend_files:
         # Initialize lists to store results for summary table
@@ -276,30 +276,26 @@ with tab2:
                     part_id = "Unknown"
                     job_no = "N/A"
                 
-                # Read CSV with updated column names based on the file format
-                # The force is in the 1st column, which is now named 'force_kn'
+                # Read CSV
                 df = pd.read_csv(bend_file, 
-                                 names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
+                                 names=['force', 'point_index', 'position', 'time', 'x_axis_measure', 'y_axis_measure'],
                                  index_col=False)
                 df = df.set_index('time')
                 
-                # Use the 'force_kn' column which contains the force measurements in kN
-                # This has been corrected to use the first column for force
+                # Use column 6 (y_axis_measure) as the force values (in Newtons)
+                # This matches Ben's original approach
+                df['force_n'] = df['y_axis_measure']
                 
-                # Convert force from kN to N using a conversion factor
-                conversion_factor = 1000
-                df['force_n'] = df['force_kn'] * conversion_factor
+                # Calculate bending strength: σ = (3FL)/(2bh²)
+                df['stress_mpa'] = (3 * df['force_n'] * support_span) / (2 * width * height**2)
+                df['stress_ncm2'] = df['stress_mpa'] * 100
                 
-                # Get max values and take the absolute value for correct bending strength calculation
-                max_force = df['force_n'].abs().max()
+                # Get max values
+                max_force = df['force_n'].max()
+                max_force_idx = df['force_n'].idxmax()
+                max_stress_ncm2 = df['stress_ncm2'].loc[max_force_idx]
                 
-                # Calculate bending strength using the maximum absolute force
-                # Formula: σ = (3FL) / (2bh^2)
-                # F in N, L, b, h in mm, then multiply by 100 to get N/cm²
-                bending_strength = (3 * max_force * support_span) / (2 * width * height**2)
-                bending_strength_ncm2 = bending_strength * 100
-                
-                status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
+                status = "✅ Pass" if max_stress_ncm2 >= 260 else "❌ Fail"
                 
                 # Store results
                 results.append({
@@ -307,7 +303,7 @@ with tab2:
                     'Part ID': part_id,
                     'Job No': job_no,
                     'Max Force (N)': max_force,
-                    'Bending Strength (N/cm^2)': bending_strength_ncm2,
+                    'Bending Strength (N/cm^2)': max_stress_ncm2,
                     'Status': status
                 })
                 dfs.append((filename, df))
@@ -317,7 +313,7 @@ with tab2:
                 st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Maximum Force", f"{max_force:.2f} N")
-                col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
+                col2.metric("Bending Strength", f"{max_stress_ncm2:.2f} N/cm²")
                 col3.metric("Quality Status", status, 
                             delta=f"Target: 260 N/cm²", 
                             delta_color="normal")
@@ -329,7 +325,7 @@ with tab2:
                 color = 'tab:blue'
                 ax1.set_xlabel('Time (s)')
                 ax1.set_ylabel('Force (N)', color=color)
-                ax1.plot(df.index, df['force_n'].abs(), color=color, label='Force')
+                ax1.plot(df.index, df['force_n'], color=color, label='Force')
                 ax1.axhline(y=max_force, color=color, linestyle='--', label='Max Force')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True)
@@ -337,11 +333,9 @@ with tab2:
                 # Stress plot (right axis)
                 ax2 = ax1.twinx()
                 color = 'tab:red'
-                # Recalculate stress for the plot using absolute force to ensure a positive graph
-                bending_strength_progression_ncm2 = (3 * df['force_n'].abs() * support_span) / (2 * width * height**2) * 100
                 ax2.set_ylabel('Stress (N/cm²)', color=color)
-                ax2.plot(df.index, bending_strength_progression_ncm2, color=color, label='Stress')
-                ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
+                ax2.plot(df.index, df['stress_ncm2'], color=color, label='Stress')
+                ax2.axhline(y=max_stress_ncm2, color=color, linestyle='--', label='Max Stress')
                 ax2.tick_params(axis='y', labelcolor=color)
                 
                 # Add legends
@@ -352,7 +346,7 @@ with tab2:
                 plt.title(f'Force and Stress Progression for {filename}')
                 st.pyplot(fig)
                 
-                if bending_strength_ncm2 < 260:
+                if max_stress_ncm2 < 260:
                     st.warning("""
                     **Recommendations to Increase Strength:**
                     - Place parts in oven at 140°C for 3 hours
@@ -366,12 +360,12 @@ with tab2:
                 **Required CSV Format:**
                 - Must have exactly 6 columns
                 - Columns must contain (in order):
-                  1. Force (in kN)
+                  1. Force (unused)
                   2. Point index
-                  3. Position (in mm)
+                  3. Position
                   4. Time
                   5. X-axis measure
-                  6. Y-axis measure
+                  6. Y-axis measure (force in Newtons)
                   
                 **Filename Format:**
                 - Must follow pattern: ..._XXXXXXXX(JJJ).csv
