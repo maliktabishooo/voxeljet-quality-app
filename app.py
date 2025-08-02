@@ -238,23 +238,25 @@ with tab2:
     st.header("3-Point Bend Test Analysis")
     st.caption("Calculate bending strength according to section 3.4 of Quality Control Manual")
 
+    # --- START OF MODIFIED CODE: Dynamic Dimension Inputs ---
     with st.expander("⚙️ Test Parameters", expanded=True):
-        # Hardcode test bar dimensions as per the manual
-        support_span = 172.0
-        width = 22.4
-        height = 22.4
-
-        st.write(f"**Support Span (L):** {support_span} mm")
-        st.write(f"**Width (b):** {width} mm")
-        st.write(f"**Height (h):** {height} mm")
+        st.subheader("Enter Test Bar Dimensions (mm)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            support_span = st.number_input("**Support Span (L)**", value=40.0, min_value=1.0, format="%.1f", help="Distance between the two lower supports.")
+        with col2:
+            width = st.number_input("**Width (b)**", value=20.0, min_value=1.0, format="%.1f", help="Width of the test bar.")
+        with col3:
+            height = st.number_input("**Height (h)**", value=10.0, min_value=1.0, format="%.1f", help="Height (thickness) of the test bar.")
+    # --- END OF MODIFIED CODE ---
 
     st.divider()
 
     st.subheader("Upload Bend Test Data")
     bend_files = st.file_uploader("Upload CSV files from bend test machine",
-                                     type=["csv"],
-                                     accept_multiple_files=True,
-                                     help="Should contain force measurements in column 1 (kN)")
+                                  type=["csv"],
+                                  accept_multiple_files=True,
+                                  help="Should contain force measurements in column 1 (kN)")
 
     if bend_files:
         # Initialize lists to store results for summary table
@@ -278,34 +280,33 @@ with tab2:
 
                 # Read CSV, specifying column names to match the file structure
                 df = pd.read_csv(bend_file,
-                                     names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
-                                     index_col=False)
+                                 names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
+                                 index_col=False)
                 
-                # --- START OF CORRECTED CODE with Rolling Average ---
+                # --- START OF MODIFIED DATA CLEANING CODE ---
+                # Drop all rows where 'y_axis_measure' (force) is non-numeric or NaN
+                df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['y_axis_measure'])
                 
-                # The raw data has a large negative spike at the beginning.
-                # Find the point where the actual test begins, where force values are near zero.
-                start_of_test_index = df[df['y_axis_measure'].abs() < 1.0].first_valid_index()
-                
-                if start_of_test_index is None:
-                    start_of_test_index = 0
+                # Find the start of the test data by identifying the first point
+                # where force starts to increase consistently from near zero.
+                # Use a rolling median to be robust against single noisy points.
+                if 'y_axis_measure' in df.columns and not df['y_axis_measure'].empty:
+                    rolling_median = df['y_axis_measure'].rolling(window=10, center=True).median()
+                    start_of_test_index = rolling_median[rolling_median > 0.05].first_valid_index()
+                    if start_of_test_index is None:
+                        start_of_test_index = 0
                 else:
-                    # Skip a few more rows after the first low value to be safe.
-                    start_of_test_index += 5
+                    st.warning(f"File '{filename}' does not contain valid 'y_axis_measure' data.")
+                    continue
                 
                 # Apply a rolling average to smooth the data from the start of the test onwards.
-                # This helps to filter out noise and find the 'true' peak of the force curve.
                 smoothed_force = df['y_axis_measure'].iloc[start_of_test_index:].rolling(window=5, min_periods=1).mean()
                 
                 # The maximum value of the smoothed data is the peak force in kilonewtons.
                 max_force_kn = smoothed_force.max()
                 
-                # --- END OF CORRECTED CODE ---
+                # --- END OF MODIFIED DATA CLEANING CODE ---
                 
-                # If max_force_kn is still very low or nan, fall back to a simpler method
-                if pd.isna(max_force_kn) or max_force_kn < 0.001:
-                    max_force_kn = df['y_axis_measure'].max()
-
                 # Convert from kilonewtons (kN) to Newtons (N) for the formula
                 max_force_n = max_force_kn * 1000
 
