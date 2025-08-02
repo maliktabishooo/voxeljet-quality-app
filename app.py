@@ -7,6 +7,7 @@ import base64
 from io import BytesIO
 import datetime
 import re
+import os  # Added the missing import
 
 # Load measurement images and Brafe logo
 x_img = Image.open('x_measurement.png')
@@ -405,6 +406,7 @@ with tab2:
             - Where `XXXXXXXX` = Part ID
             - Where `JJJ` = Job Number
             """)
+
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
     st.caption("Calculate binder content according to section 3.5 of Quality Control Manual")
