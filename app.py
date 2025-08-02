@@ -238,233 +238,394 @@ with tab2:
     st.header("3-Point Bend Test Analysis")
     st.caption("Calculate bending strength according to section 3.4 of Quality Control Manual")
 
-    # Dynamic Dimension Inputs
-    with st.expander("⚙️ Test Parameters", expanded=True):
-        st.subheader("Enter Test Bar Dimensions (mm)")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            support_span = st.number_input("**Support Span (L)**", value=40.0, min_value=1.0, format="%.1f", help="Distance between the two lower supports.")
-        with col2:
-            width = st.number_input("**Width (b)**", value=20.0, min_value=1.0, format="%.1f", help="Width of the test bar.")
-        with col3:
-            height = st.number_input("**Height (h)**", value=10.0, min_value=1.0, format="%.1f", help="Height (thickness) of the test bar.")
+    # Manual Force Input Option
+    manual_mode = st.checkbox("Enter Force Value Manually", value=False)
+    
+    # Default dimensions for reference
+    DEFAULT_L = 172.0
+    DEFAULT_B = 22.4
+    DEFAULT_H = 22.4
+    
+    if manual_mode:
+        # Manual mode with per-bar dimensions
+        with st.form("manual_force"):
+            st.subheader("Enter Test Bar Parameters")
             
-    st.divider()
+            # Create columns for multiple bars
+            num_bars = st.number_input("Number of Test Bars", min_value=1, max_value=10, value=1)
+            
+            manual_results = []
+            cols = st.columns(3)
+            
+            with cols[0]:
+                st.subheader("Support Span (L mm)")
+            with cols[1]:
+                st.subheader("Width (b mm)")
+            with cols[2]:
+                st.subheader("Height (h mm)")
+            
+            for i in range(num_bars):
+                cols = st.columns(3)
+                with cols[0]:
+                    L = st.number_input(f"Bar {i+1} Span", 
+                                      value=DEFAULT_L, 
+                                      min_value=1.0, 
+                                      key=f"L_{i}",
+                                      format="%.1f")
+                with cols[1]:
+                    b = st.number_input(f"Bar {i+1} Width", 
+                                      value=DEFAULT_B, 
+                                      min_value=1.0, 
+                                      key=f"b_{i}",
+                                      format="%.1f")
+                with cols[2]:
+                    h = st.number_input(f"Bar {i+1} Height", 
+                                      value=DEFAULT_H, 
+                                      min_value=1.0, 
+                                      key=f"h_{i}",
+                                      format="%.1f")
+            
+            st.divider()
+            st.subheader("Enter Force Values")
+            
+            force_cols = st.columns(num_bars)
+            forces = []
+            for i in range(num_bars):
+                with force_cols[i]:
+                    force = st.number_input(f"Force for Bar {i+1} (N)", 
+                                          min_value=0.0, 
+                                          value=285.76,
+                                          key=f"force_{i}",
+                                          format="%.2f")
+                    forces.append(force)
+            
+            submitted = st.form_submit_button("Calculate Bending Strength")
+            
+            if submitted:
+                results = []
+                for i in range(num_bars):
+                    # Calculate bending strength in N/cm²
+                    L_cm = L * 0.1
+                    b_cm = b * 0.1
+                    h_cm = h * 0.1
+                    
+                    bending_strength = (3 * forces[i] * L_cm) / (2 * b_cm * h_cm**2)
+                    status = "✅ Pass" if bending_strength >= 260 else "❌ Fail"
+                    
+                    results.append({
+                        'Bar #': i+1,
+                        'Support Span (mm)': L,
+                        'Width (mm)': b,
+                        'Height (mm)': h,
+                        'Max Force (N)': forces[i],
+                        'Bending Strength (N/cm²)': bending_strength,
+                        'Status': status
+                    })
+                
+                # Display results
+                st.subheader("Results")
+                result_df = pd.DataFrame(results)
+                st.dataframe(result_df.style.format({
+                    'Max Force (N)': '{:.2f}',
+                    'Bending Strength (N/cm²)': '{:.2f}'
+                }))
+                
+                # Show status metrics
+                for i, res in enumerate(results):
+                    cols = st.columns(5)
+                    cols[0].metric("Bar", f"{i+1}")
+                    cols[1].metric("Force", f"{res['Max Force (N)']:.2f} N")
+                    cols[2].metric("Strength", f"{res['Bending Strength (N/cm²)']:.2f} N/cm²")
+                    cols[3].metric("Status", res['Status'])
+                    cols[4].metric("Target", "260 N/cm²")
+                    
+                    if res['Bending Strength (N/cm²)'] < 260:
+                        st.warning(f"**Bar {i+1} Recommendations:** Increase binder amount or extend rest period")
+                
+                # Download button
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    result_df.to_excel(writer, sheet_name='Results', index=False)
+                    
+                    # Formatting
+                    workbook = writer.book
+                    worksheet = writer.sheets['Results']
+                    
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'bg_color': '#003366',
+                        'font_color': 'white',
+                        'border': 1
+                    })
+                    
+                    for col_num, value in enumerate(result_df.columns):
+                        worksheet.write(0, col_num, value, header_format)
+                    
+                    worksheet.set_column('A:A', 10)
+                    worksheet.set_column('B:D', 20)
+                    worksheet.set_column('E:F', 25)
+                    worksheet.set_column('G:G', 15)
+                
+                st.download_button(
+                    label="Download Excel Report",
+                    data=output.getvalue(),
+                    file_name=f"Brafe_Manual_BendTest_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+    else:
+        # CSV mode with per-bar dimensions
+        st.subheader("Upload Bend Test Data")
+        bend_files = st.file_uploader("Upload CSV files from bend test machine",
+                                      type=["csv"],
+                                      accept_multiple_files=True,
+                                      help="Should contain force measurements in last column (Newtons)")
 
-    st.subheader("Upload Bend Test Data")
-    bend_files = st.file_uploader("Upload CSV files from bend test machine",
-                                  type=["csv"],
-                                  accept_multiple_files=True,
-                                  help="Should contain force measurements in column 1 (kN)")
-
-    if bend_files:
-        # Initialize lists to store results for summary table
-        results = []
-        dfs = []
-
-        for bend_file in bend_files:
-            try:
-                # Extract part ID and job number from filename
+        if bend_files:
+            # Initialize lists to store results for summary table
+            results = []
+            dfs = []
+            
+            # Section for per-file dimensions
+            st.subheader("Specify Dimensions for Each Test Bar")
+            st.caption("Enter custom dimensions for each test bar or use global defaults")
+            
+            # Global defaults
+            with st.expander("⚙️ Global Default Dimensions", expanded=False):
+                global_cols = st.columns(3)
+                with global_cols[0]:
+                    global_L = st.number_input("**Default Support Span (L)**", 
+                                             value=DEFAULT_L, 
+                                             min_value=1.0, 
+                                             format="%.1f")
+                with global_cols[1]:
+                    global_b = st.number_input("**Default Width (b)**", 
+                                             value=DEFAULT_B, 
+                                             min_value=1.0, 
+                                             format="%.1f")
+                with global_cols[2]:
+                    global_h = st.number_input("**Default Height (h)**", 
+                                             value=DEFAULT_H, 
+                                             min_value=1.0, 
+                                             format="%.1f")
+            
+            # Create dimension inputs for each file
+            file_params = {}
+            for i, bend_file in enumerate(bend_files):
                 filename = bend_file.name
-                path_split_ext = os.path.splitext(filename)
-                path_split = os.path.split(path_split_ext[0])
-                test_key = path_split[1][16:] if len(path_split[1]) >= 16 else path_split[1]
-
-                try:
-                    part_id = test_key.split("(")[0]
-                    job_no = test_key.split('(')[1][:-1]
-                except:
-                    part_id = "Unknown"
-                    job_no = "N/A"
-
-                # Read CSV, specifying column names to match the file structure
-                df = pd.read_csv(bend_file,
-                                 names=['force_kn', 'point_index', 'position_mm', 'time', 'x_axis_measure', 'y_axis_measure'],
-                                 index_col=False)
                 
-                # --- START OF CORRECTED & ENHANCED CODE ---
-                # Drop rows with non-numeric data in key columns
-                df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['force_kn', 'position_mm'])
+                cols = st.columns(4)
+                with cols[0]:
+                    st.markdown(f"**{filename}**")
+                with cols[1]:
+                    L = st.number_input(f"Span for {filename}", 
+                                      value=global_L, 
+                                      min_value=1.0, 
+                                      key=f"L_{filename}",
+                                      format="%.1f")
+                with cols[2]:
+                    b = st.number_input(f"Width for {filename}", 
+                                      value=global_b, 
+                                      min_value=1.0, 
+                                      key=f"b_{filename}",
+                                      format="%.1f")
+                with cols[3]:
+                    h = st.number_input(f"Height for {filename}", 
+                                      value=global_h, 
+                                      min_value=1.0, 
+                                      key=f"h_{filename}",
+                                      format="%.1f")
                 
-                # Filter out negative force values
-                df = df[df['force_kn'] >= 0]
-                
-                # Filter out any unrealistically large position values (e.g., > 100mm)
-                # This helps to remove sensor errors
-                df = df[df['position_mm'] < 100]
+                file_params[filename] = {'L': L, 'b': b, 'h': h}
+            
+            if st.button("Process All Files", key="process_all"):
+                for bend_file in bend_files:
+                    filename = bend_file.name
+                    params = file_params[filename]
+                    
+                    try:
+                        # Extract part ID and job number from filename
+                        path_split_ext = os.path.splitext(filename)
+                        path_split = os.path.split(path_split_ext[0])
+                        test_key = path_split[1][16:] if len(path_split[1]) >= 16 else path_split[1]
 
-                if df.empty:
-                    st.warning(f"File '{filename}' does not contain any valid data after cleaning.")
-                    continue
-                
-                # Use a rolling window to detect the start of a consistent upward trend in position.
-                # This is more robust than looking for a single non-zero value.
-                # We look for a minimum change in position over a small window of 5 points.
-                position_change = df['position_mm'].diff().rolling(window=5, min_periods=1).mean()
-                start_of_test_index = position_change[position_change > 0.01].index[0] if not position_change[position_change > 0.01].empty else 0
-                
-                # Extract the relevant data from the start of the test
-                test_df = df.iloc[start_of_test_index:].reset_index(drop=True)
-                
-                # Use a rolling average to smooth the force data.
-                smoothed_force_kn = test_df['force_kn'].rolling(window=5, min_periods=1).mean()
-                
-                # The maximum value of the smoothed data is the peak force in kilonewtons.
-                max_force_kn = smoothed_force_kn.max()
+                        try:
+                            part_id = test_key.split("(")[0]
+                            job_no = test_key.split('(')[1][:-1]
+                        except:
+                            part_id = "Unknown"
+                            job_no = "N/A"
 
-                # Convert from kilonewtons (kN) to Newtons (N) for the formula
-                max_force_n = max_force_kn * 1000
-                
-                # --- END OF CORRECTED & ENHANCED CODE ---
-                
-                # Calculate bending strength: σ = (3FL)/(2bh²)
-                bending_strength_nmm2 = (3 * max_force_n * support_span) / (2 * width * height**2)
-                bending_strength_ncm2 = bending_strength_nmm2 * 100
-                
-                status = "✅ Pass" if bending_strength_ncm2 >= 260 else "❌ Fail"
+                        # Read CSV - using last column as force (Newtons)
+                        df = pd.read_csv(bend_file, header=None)
+                        
+                        # Validate column count
+                        if len(df.columns) < 6:
+                            st.error(f"File '{filename}' has only {len(df.columns)} columns. Expected at least 6 columns.")
+                            continue
+                            
+                        # Rename columns - focus on last column for force
+                        df.columns = [f'col_{i}' for i in range(len(df.columns))]
+                        df['force_n'] = df.iloc[:, -1]  # Use last column as force
+                        
+                        # Clean data - filter bad sensor readings
+                        # Step 1: Remove invalid values
+                        df = df.replace([np.inf, -np.inf], np.nan)
+                        df = df.dropna(subset=['force_n'])
+                        
+                        # Step 2: Convert to numeric
+                        df['force_n'] = pd.to_numeric(df['force_n'], errors='coerce')
+                        df = df.dropna(subset=['force_n'])
+                        
+                        # Step 3: Filter negative values
+                        df = df[df['force_n'] >= 0]
+                        
+                        # Step 4: Remove outliers using IQR method
+                        Q1 = df['force_n'].quantile(0.25)
+                        Q3 = df['force_n'].quantile(0.75)
+                        IQR = Q3 - Q1
+                        lower_bound = Q1 - 1.5 * IQR
+                        upper_bound = Q3 + 1.5 * IQR
+                        
+                        filtered_df = df[(df['force_n'] >= lower_bound) & 
+                                         (df['force_n'] <= upper_bound)]
+                        
+                        # If too much data removed, use original
+                        if len(filtered_df) < 0.7 * len(df):
+                            st.warning(f"Outlier filtering removed >30% of data for {filename}. Using unfiltered data.")
+                            filtered_df = df.copy()
+                        
+                        # Step 5: Find start of test (first significant force value)
+                        force_threshold = 0.1 * filtered_df['force_n'].max()
+                        start_index = filtered_df[filtered_df['force_n'] > force_threshold].index[0] if not filtered_df[filtered_df['force_n'] > force_threshold].empty else 0
+                        test_df = filtered_df.iloc[start_index:].reset_index(drop=True)
+                        
+                        # Step 6: Smooth force data
+                        test_df['smoothed_force_n'] = test_df['force_n'].rolling(window=5, min_periods=1).mean()
+                        max_force_n = test_df['smoothed_force_n'].max()
+                        
+                        # Calculate bending strength in N/cm²
+                        # Formula: σ = (3 * F * L) / (2 * b * h²)
+                        L_cm = params['L'] * 0.1
+                        b_cm = params['b'] * 0.1
+                        h_cm = params['h'] * 0.1
+                        
+                        bending_strength = (3 * max_force_n * L_cm) / (2 * b_cm * h_cm**2)
+                        status = "✅ Pass" if bending_strength >= 260 else "❌ Fail"
 
-                # Store results
-                results.append({
-                    'Filename': filename,
-                    'Part ID': part_id,
-                    'Job No': job_no,
-                    'Max Force (N)': max_force_n,
-                    'Bending Strength (N/cm^2)': bending_strength_ncm2,
-                    'Status': status
-                })
-                dfs.append((filename, df))
+                        # Store results
+                        results.append({
+                            'Filename': filename,
+                            'Part ID': part_id,
+                            'Job No': job_no,
+                            'Support Span (mm)': params['L'],
+                            'Width (mm)': params['b'],
+                            'Height (mm)': params['h'],
+                            'Max Force (N)': max_force_n,
+                            'Bending Strength (N/cm²)': bending_strength,
+                            'Status': status
+                        })
+                        dfs.append((filename, test_df))
 
-                # Display individual results
-                st.subheader(f"Results for {filename}")
-                st.info(f"**Part ID:** {part_id} | **Job No:** {job_no}")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Maximum Force", f"{max_force_n:.2f} N")
-                col2.metric("Bending Strength", f"{bending_strength_ncm2:.2f} N/cm²")
-                col3.metric("Quality Status", status,
-                            delta=f"Target: 260 N/cm²",
-                            delta_color="normal")
+                    except Exception as e:
+                        st.error(f"Error processing file {filename}: {str(e)}")
+                        st.info("""
+                        **Required CSV Format:**
+                        - Must have at least 6 columns
+                        - Last column should contain force values in Newtons (N)
+                        - Example row: `-10.7649,0,0,1.064,1.064,10.7649`
+                        """)
 
-                # Create dual-axis plot for force and stress progression
-                fig, ax1 = plt.subplots(figsize=(10, 6))
+                # Display summary table
+                if results:
+                    st.subheader("Test Results Summary")
+                    summary_df = pd.DataFrame(results)
+                    st.dataframe(summary_df.style.format({
+                        'Max Force (N)': '{:.2f}',
+                        'Bending Strength (N/cm²)': '{:.2f}'
+                    }))
 
-                # Force plot (left axis)
-                color = 'tab:blue'
-                ax1.set_xlabel('Time (s)')
-                ax1.set_ylabel('Force (N)', color=color)
-                # Plotting the smoothed force data
-                ax1.plot(test_df['time'], smoothed_force_kn * 1000, color=color, label='Smoothed Force')
-                ax1.axhline(y=max_force_n, color=color, linestyle='--', label='Max Smoothed Force')
-                ax1.tick_params(axis='y', labelcolor=color)
-                ax1.grid(True)
+                    # Generate combined Excel report
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                        # Write summary sheet
+                        summary_df.to_excel(writer, sheet_name='Summary', index=False)
 
-                # Stress plot (right axis)
-                ax2 = ax1.twinx()
-                color = 'tab:red'
-                ax2.set_ylabel('Stress (N/cm²)', color=color)
-                
-                # Recalculate stress for the plot using the smoothed force data
-                smoothed_stress_ncm2 = ((3 * (smoothed_force_kn * 1000) * support_span) / (2 * width * height**2)) * 100
-                ax2.plot(test_df['time'], smoothed_stress_ncm2, color=color, label='Smoothed Stress')
-                ax2.axhline(y=bending_strength_ncm2, color=color, linestyle='--', label='Max Stress')
-                ax2.tick_params(axis='y', labelcolor=color)
+                        # Write raw data for each file
+                        for filename, df in dfs:
+                            safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
+                            df.to_excel(writer, sheet_name=safe_sheet_name)
 
-                # Add legends
-                lines1, labels1 = ax1.get_legend_handles_labels()
-                lines2, labels2 = ax2.get_legend_handles_labels()
-                ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+                        # Formatting
+                        workbook = writer.book
+                        summary_sheet = writer.sheets['Summary']
+                        header_format = workbook.add_format({
+                            'bold': True,
+                            'bg_color': '#003366',
+                            'font_color': 'white',
+                            'border': 1
+                        })
+                        pass_format = workbook.add_format({
+                            'bg_color': '#d4edda',
+                            'font_color': '#155724'
+                        })
+                        fail_format = workbook.add_format({
+                            'bg_color': '#f8d7da',
+                            'font_color': '#721c24'
+                        })
 
-                plt.title(f'Force and Stress Progression for {filename}')
-                st.pyplot(fig)
+                        for col_num, value in enumerate(summary_df.columns):
+                            summary_sheet.write(0, col_num, value, header_format)
 
-                if bending_strength_ncm2 < 260:
-                    st.warning("""
-                    **Recommendations to Increase Strength:**
-                    - Place parts in oven at 140°C for 3 hours
-                    - Increase binder amount
-                    - Extend rest period before testing
-                    """)
+                        status_col = summary_df.columns.get_loc('Status')
+                        for row in range(1, len(summary_df) + 1):
+                            status_value = summary_df.loc[row - 1, 'Status']
+                            if status_value == "✅ Pass":
+                                summary_sheet.write(row, status_col, status_value, pass_format)
+                            else:
+                                summary_sheet.write(row, status_col, status_value, fail_format)
 
-            except Exception as e:
-                st.error(f"Error processing file {filename}: {str(e)}")
-                st.info("""
-                **Required CSV Format:**
-                - Must have exactly 6 columns
-                - Columns must contain (in order):
-                  1. Force (kN)
-                  2. Point index
-                  3. Position (mm)
-                  4. Time (s)
-                  5. X-axis measure
-                  6. Y-axis measure
-                """)
+                        for filename, df in dfs:
+                            safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
+                            raw_sheet = writer.sheets[safe_sheet_name]
+                            raw_sheet.write_row(0, 0, df.columns.values, header_format)
 
-        # Display summary table
-        if results:
-            st.subheader("Summary of All Files")
-            summary_df = pd.DataFrame(results)
-            st.dataframe(summary_df.style.format({
-                'Max Force (N)': '{:.2f}',
-                'Bending Strength (N/cm^2)': '{:.2f}'
-            }))
+                        summary_sheet.set_column('A:A', 30)
+                        summary_sheet.set_column('B:I', 20)
+                        for filename, df in dfs:
+                            safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
+                            writer.sheets[safe_sheet_name].set_column('A:Z', 15)
 
-            # Generate combined Excel report
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Write summary sheet
-                summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                    # Download button
+                    st.download_button(
+                        label="Download Combined Excel Report",
+                        data=output.getvalue(),
+                        file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
-                # Write raw data for each file
-                for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
-                    df.to_excel(writer, sheet_name=safe_sheet_name)
-
-                # Formatting (unchanged)
-                workbook = writer.book
-                summary_sheet = writer.sheets['Summary']
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'bg_color': '#003366',
-                    'font_color': 'white',
-                    'border': 1
-                })
-                pass_format = workbook.add_format({
-                    'bg_color': '#d4edda',
-                    'font_color': '#155724'
-                })
-                fail_format = workbook.add_format({
-                    'bg_color': '#f8d7da',
-                    'font_color': '#721c24'
-                })
-
-                for col_num, value in enumerate(summary_df.columns):
-                    summary_sheet.write(0, col_num, value, header_format)
-
-                status_col = summary_df.columns.get_loc('Status')
-                for row in range(1, len(summary_df) + 1):
-                    status_value = summary_df.loc[row - 1, 'Status']
-                    if status_value == "✅ Pass":
-                        summary_sheet.write(row, status_col, status_value, pass_format)
-                    else:
-                        summary_sheet.write(row, status_col, status_value, fail_format)
-
-                for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
-                    raw_sheet = writer.sheets[safe_sheet_name]
-                    raw_sheet.write_row(0, 0, df.columns.values, header_format)
-
-                summary_sheet.set_column('A:A', 30)
-                summary_sheet.set_column('B:F', 20)
-                for filename, df in dfs:
-                    safe_sheet_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:31]
-                    writer.sheets[safe_sheet_name].set_column('A:Z', 15)
-
-            # Download button
-            st.download_button(
-                label="Download Combined Excel Report",
-                data=output.getvalue(),
-                file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                    # Display individual results
+                    for res in results:
+                        st.divider()
+                        st.subheader(f"Results for {res['Filename']}")
+                        cols = st.columns(4)
+                        cols[0].metric("Part ID", res['Part ID'])
+                        cols[1].metric("Job No", res['Job No'])
+                        cols[2].metric("Dimensions", f"{res['Support Span (mm)']}×{res['Width (mm)']}×{res['Height (mm)']} mm")
+                        cols[3].metric("Status", res['Status'])
+                        
+                        cols = st.columns(3)
+                        cols[0].metric("Max Force", f"{res['Max Force (N)']:.2f} N")
+                        cols[1].metric("Bending Strength", f"{res['Bending Strength (N/cm²)']:.2f} N/cm²")
+                        cols[2].metric("Target Strength", "260 N/cm²")
+                        
+                        if res['Bending Strength (N/cm²)'] < 260:
+                            st.warning("""
+                            **Recommendations to Increase Strength:**
+                            - Place parts in oven at 140°C for 3 hours
+                            - Increase binder amount
+                            - Extend rest period before testing
+                            - Check for printing defects (layer separation)
+                            """)
 
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
