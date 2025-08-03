@@ -498,10 +498,9 @@ with tab2:
                         # Save logo to BytesIO buffer
                         logo_buffer = BytesIO()
                         brafe_logo.save(logo_buffer, format='PNG')
-                        logo_data = logo_buffer.getvalue()
-                        
-                        # Insert logo into Excel
-                        front_sheet.insert_image('B2', 'brafe_logo.png', {'image_data': logo_data, 'x_scale': 0.5, 'y_scale': 0.5})
+                        logo_buffer.seek(0)  # Reset buffer position to start
+                        # Insert logo into Excel using BytesIO
+                        front_sheet.insert_image('B2', 'logo.png', {'image_data': logo_buffer})
                         logo_height = 80  # Increase row height for logo
                     except Exception as e:
                         st.warning(f"Could not add logo to Excel: {str(e)}")
@@ -543,10 +542,6 @@ with tab2:
                 
                 # Add test parameters table
                 test_date = datetime.datetime.now().strftime('%Y-%m-%d')
-                
-                # Basic test info
-                front_sheet.write_string(5, 1, "Parameter", header_format)
-                front_sheet.write_string(5, 2, "Value", header_format)
                 
                 # Initialize fallback values
                 part_id = 'N/A'
