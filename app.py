@@ -218,7 +218,7 @@ with tab1:
                 st.markdown(f'<div class="{"pass-metric" if z_status == "✅ Pass" else "fail-metric"}">{z_status}</div>', 
                             unsafe_allow_html=True)
             
-            # New code: Add total dimension metric
+            # Add total dimension metric
             total_dimension = x_measured + y_measured + z_measured
             st.markdown("---")
             st.metric("Total Measured Dimensions", f"{total_dimension:.1f} mm")
@@ -829,4 +829,30 @@ with tab3:
                 st.download_button(
                     label="Download Excel Report",
                     data=output.getvalue(),
-                    file_name=f"Brafe_LOI_Report_{datetime.datetime.now().strftime('%Y%m%d_%H
+                    file_name=f"Brafe_LOI_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+                if "Bunsen" in method:
+                    st.caption("Bunsen Burner Method Notes:\n- Burn until sand turns white\n- Stir every minute\n- Cool for 20 min before weighing")
+                else:
+                    st.caption("Oven Method Notes:\n- Heat to 900°C for 3 hours\n- Cool in closed oven before weighing")
+                    
+            except Exception as e:
+                st.error(f"Calculation error: {str(e)}")
+    
+    st.divider()
+    st.subheader("LOI Formula Reference")
+    st.latex(r'''
+    \begin{align*}
+    \Delta m &= (|T2| - |T1|) - W1 \\
+    LOI (\%) &= \left( \frac{|\Delta m|}{W1} \right) \times 100
+    \end{align*}
+    ''')
+    st.caption("Note: Algebraic signs are not considered in calculations (per manual section 3.5)")
+
+# Footer with Brafe branding
+st.divider()
+st.caption("""
+**Quality Control Manual Reference:** PDB_02P06PDBQL2 (Version 0001, Dec 2022) 
+""")
