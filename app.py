@@ -529,13 +529,7 @@ with tab2:
                 front_sheet.set_column('A:A', 2)  # Padding
                 front_sheet.set_column('B:B', 20)  # Second column (B)
                 front_sheet.set_column('C:C', 20)  # Third column (C)
-                
-                # Set row heights to accommodate logo (total 61.42 px)
-                front_sheet.set_row(0, 30.71)  # Row 1
-                front_sheet.set_row(1, 30.71)  # Row 2
-                front_sheet.set_row(2, 5)  # Spacer
-                front_sheet.set_row(3, 20)  # Title row
-                
+        
                 # Add title
                 front_sheet.merge_range('B4:C4', 'Brafe Engineering - Bend Test Report', title_format)
                 
@@ -548,35 +542,8 @@ with tab2:
                     first_result = results[0]
                     part_id = first_result.get('Part ID', 'N/A')
                     job_no = first_result.get('Job No', 'N/A')
-                    L = first_result.get('L (mm)', 172.0)
-                    b = first_result.get('b (mm)', 22.4)
-                    h = first_result.get('h (mm)', 22.4)
-                    max_force_n = first_result.get('Max Force (N)', 0)
-                    bending_strength = first_result.get('Bending Strength (N/cm²)', 0)
-                    status = first_result.get('Status', 'N/A')
-                
-                test_info = [
-                    ("Test Date", test_date),
-                    ("Operator", operator_name),
-                    ("Test ID", test_id),
-                    ("", ""),  # Spacer
-                    ("Part ID", part_id),
-                    ("Job No", job_no),
-                    ("Support Span (mm)", f"{L}"),
-                    ("Width (mm)", f"{b}"),
-                    ("Height (mm)", f"{h}"),
-                    ("Max Force (N)", f"{max_force_n:.2f}"),
-                    ("Bending Strength (N/cm²)", f"{bending_strength:.2f}"),
-                    ("Status", status)
-                ]
-                
-                for i, (param, value) in enumerate(test_info, start=6):
-                    front_sheet.write_string(i, 1, param, header_format)
-                    if param in ["Max Force (N)", "Bending Strength (N/cm²)"]:
-                        front_sheet.write_string(i, 2, value, number_format)
-                    else:
-                        front_sheet.write_string(i, 2, value, value_format)
-                
+              
+               
                 # Add summary table title
                 front_sheet.write_string(18, 1, "Summary of All Tests", title_format)
                 
