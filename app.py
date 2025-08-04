@@ -541,8 +541,8 @@ with tab2:
                             'image_data': logo_buffer,
                             'x_scale': 1,
                             'y_scale': 1,
-                            'width': 9.16cm,
-                            'height': 2.17cm
+                            'width': 9.16,
+                            'height': 2.17
                         })
                     except Exception as e:
                         st.warning(f"Could not add logo to Excel: {str(e)}")
