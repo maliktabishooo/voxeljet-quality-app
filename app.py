@@ -526,8 +526,7 @@ with tab2:
                 # ========== Create Front Page ==========
                 front_sheet = workbook.add_worksheet('Test Parameters')
                 
-                # Add Brafe logo in merged cells B1:C2
-                logo_height = 50  # Height per row
+                # Add Brafe logo in merged cells B1:C2 with exact size
                 if brafe_logo:
                     try:
                         # Save logo to BytesIO buffer
@@ -537,22 +536,25 @@ with tab2:
                         # Merge cells B1:C2 for logo
                         front_sheet.merge_range('B1:C2', '')
                         # Insert logo into merged cells B1:C2
+                        # Set exact dimensions: width=9.16 cm (259.49 px), height=2.17 cm (61.42 px)
                         front_sheet.insert_image('B1', 'brafe_logo.png', {
                             'image_data': logo_buffer,
-                            'x_scale': 0.4,
-                            'y_scale': 0.4
+                            'x_scale': 1,
+                            'y_scale': 1,
+                            'width': 259.49,
+                            'height': 61.42
                         })
                     except Exception as e:
                         st.warning(f"Could not add logo to Excel: {str(e)}")
                 
                 # Set column widths
                 front_sheet.set_column('A:A', 2)  # Padding
-                front_sheet.set_column('B:B', 25)  # Parameter column
-                front_sheet.set_column('C:C', 25)  # Value column
+                front_sheet.set_column('B:B', 20)  # Second column (B)
+                front_sheet.set_column('C:C', 20)  # Third column (C)
                 
-                # Set row heights
-                front_sheet.set_row(0, logo_height)  # Row 1 for logo
-                front_sheet.set_row(1, logo_height)  # Row 2 for logo
+                # Set row heights to accommodate logo (total 61.42 px)
+                front_sheet.set_row(0, 30.71)  # Row 1
+                front_sheet.set_row(1, 30.71)  # Row 2
                 front_sheet.set_row(2, 5)  # Spacer
                 front_sheet.set_row(3, 20)  # Title row
                 
