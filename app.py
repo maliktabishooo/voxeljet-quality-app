@@ -122,7 +122,7 @@ with st.sidebar:
     # Engineering Resources
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.header("Brafe Engineering Resources")
-    st.markdown("[Quality Control - LOI and 3 Point Bend Test methods]")
+    st.markdown("Quality Control - LOI and 3 Point Bend Test methods")
     st.markdown("[Technical Support](mailto:info@brafe.com)")
     st.markdown("Hotline: +44 (0) 1394 380 000")
     st.markdown('</div>', unsafe_allow_html=True)
