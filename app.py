@@ -3,38 +3,68 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-import base64
 from io import BytesIO
 import datetime
 import re
 import os
+import time
+
+# Enable automatic reload
+def autoreload():
+    st.runtime.legacy_caching.clear_cache()
+    st.experimental_rerun()
+
+# Check for file changes and reload
+def watch_files():
+    watched_files = ['x_measurement.png', 'y_measurement.png', 'z_measurement.png', 'brafe_logo.png']
+    file_stats = {f: os.stat(f).st_mtime if os.path.exists(f) else 0 for f in watched_files}
+    
+    while True:
+        time.sleep(1)
+        for f in watched_files:
+            if os.path.exists(f):
+                current_mtime = os.stat(f).st_mtime
+                if current_mtime > file_stats[f]:
+                    file_stats[f] = current_mtime
+                    autoreload()
+
+# Start file watcher in a separate thread
+if not st._is_running_with_streamlit:
+    import threading
+    threading.Thread(target=watch_files, daemon=True).start()
 
 # Load measurement images and Brafe logo with error handling
-try:
-    x_img = Image.open('x_measurement.png')
-except FileNotFoundError:
-    x_img = None
-    st.warning("Image 'x_measurement.png' not found. Using placeholder.")
-try:
-    y_img = Image.open('y_measurement.png')
-except FileNotFoundError:
-    y_img = None
-    st.warning("Image 'y_measurement.png' not found. Using placeholder.")
-try:
-    z_img = Image.open('z_measurement.png')
-except FileNotFoundError:
-    z_img = None
-    st.warning("Image 'z_measurement.png' not found. Using placeholder.")
-try:
-    brafe_logo = Image.open('brafe_logo.png')
-except FileNotFoundError:
-    brafe_logo = None
-    st.warning("Image 'brafe_logo.png' not found. Using placeholder.")
+@st.cache_resource
+def load_images():
+    images = {}
+    try:
+        images['x_img'] = Image.open('x_measurement.png')
+    except FileNotFoundError:
+        images['x_img'] = None
+        st.warning("Image 'x_measurement.png' not found. Using placeholder.")
+    try:
+        images['y_img'] = Image.open('y_measurement.png')
+    except FileNotFoundError:
+        images['y_img'] = None
+        st.warning("Image 'y_measurement.png' not found. Using placeholder.")
+    try:
+        images['z_img'] = Image.open('z_measurement.png')
+    except FileNotFoundError:
+        images['z_img'] = None
+        st.warning("Image 'z_measurement.png' not found. Using placeholder.")
+    try:
+        images['brafe_logo'] = Image.open('brafe_logo.png')
+    except FileNotFoundError:
+        images['brafe_logo'] = None
+        st.warning("Image 'brafe_logo.png' not found. Using placeholder.")
+    return images
+
+images = load_images()
 
 # App configuration with updated blue theme
 st.set_page_config(
     page_title="Brafe Engineering Quality Control",
-    page_icon=brafe_logo if brafe_logo else ":bar_chart:",
+    page_icon=images['brafe_logo'] if images['brafe_logo'] else ":bar_chart:",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -104,19 +134,32 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Initialize session state
+def initialize_session_state():
+    if 'operator_name' not in st.session_state:
+        st.session_state.operator_name = "Your Name"
+    if 'test_id' not in st.session_state:
+        st.session_state.test_id = "TEST-001"
+    if 'file_dimensions' not in st.session_state:
+        st.session_state.file_dimensions = {}
+    if 'loi_results' not in st.session_state:
+        st.session_state.loi_results = None
+
+initialize_session_state()
+
 # Sidebar with Brafe branding
 with st.sidebar:
     # Brafe logo
-    if brafe_logo:
-        st.image(brafe_logo, width=150)
+    if images['brafe_logo']:
+        st.image(images['brafe_logo'], width=150)
     else:
         st.markdown("**Brafe Logo Placeholder**")
     
     # Test Information
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.subheader("Test Information")
-    st.session_state.operator_name = st.text_input("Operator Name", "Your Name", key="global_operator")
-    st.session_state.test_id = st.text_input("Test ID", "TEST-001", key="global_test_id")
+    st.session_state.operator_name = st.text_input("Operator Name", st.session_state.operator_name, key="global_operator")
+    st.session_state.test_id = st.text_input("Test ID", st.session_state.test_id, key="global_test_id")
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Engineering Resources
@@ -150,20 +193,20 @@ with tab1:
     with st.expander("📏 Measurement Instructions", expanded=True):
         cols = st.columns(3)
         with cols[0]:
-            if x_img:
-                st.image(x_img, caption="Measure Dimension X (Length)", use_container_width=True)
+            if images['x_img']:
+                st.image(images['x_img'], caption="Measure Dimension X (Length)", use_container_width=True)
             else:
                 st.markdown("**Image Placeholder: Measure Dimension X (Length)**")
             st.info("**X-Dimension:**\n- Length direction\n- Nominal: 172 mm")
         with cols[1]:
-            if y_img:
-                st.image(y_img, caption="Measure Dimension Y (Width)", use_container_width=True)
+            if images['y_img']:
+                st.image(images['y_img'], caption="Measure Dimension Y (Width)", use_container_width=True)
             else:
                 st.markdown("**Image Placeholder: Measure Dimension Y (Width)**")
             st.info("**Y-Dimension:**\n- Width direction\n- Nominal: 22.4 mm")
         with cols[2]:
-            if z_img:
-                st.image(z_img, caption="Measure Dimension Z (Height)", use_container_width=True)
+            if images['z_img']:
+                st.image(images['z_img'], caption="Measure Dimension Z (Height)", use_container_width=True)
             else:
                 st.markdown("**Image Placeholder: Measure Dimension Z (Height)**")
             st.info("**Z-Dimension:**\n- Height direction\n- Nominal: 22.4 mm")
@@ -263,10 +306,6 @@ with tab2:
     nominal_strength = 260  # N/cm²
     st.markdown(f"**Nominal Bending Strength:** {nominal_strength} N/cm²")
     
-    # Initialize session state for dimensions
-    if 'file_dimensions' not in st.session_state:
-        st.session_state.file_dimensions = {}
-    
     bend_files = st.file_uploader("Upload CSV files from bend test machine",
                                   type=["csv"],
                                   accept_multiple_files=True,
@@ -277,7 +316,6 @@ with tab2:
         results = []
         dfs = []
         dimension_entries = []
-        graphs = []  # Store graph images for Excel
         
         # Create dimension input section
         with st.expander("⚙️ Set Test Bar Dimensions for Each File", expanded=True):
@@ -358,9 +396,6 @@ with tab2:
                 
                 # Read CSV - handle trailing commas
                 df = pd.read_csv(bend_file, header=None)
-                
-                # Fix for files with trailing commas (like the example)
-                # Remove any empty columns at the end
                 df = df.dropna(axis=1, how='all')
                 
                 # Validate column count
@@ -370,25 +405,20 @@ with tab2:
                     
                 # Rename columns - use 6th column for force (index 5)
                 df.columns = [f'col_{i}' for i in range(len(df.columns))]
-                df['force_n'] = df.iloc[:, 5]  # Use 6th column as force
+                df['force_n'] = df.iloc[:, 5]
                 
                 # Clean data
                 df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=['force_n'])
                 df['force_n'] = pd.to_numeric(df['force_n'], errors='coerce')
                 df = df.dropna(subset=['force_n'])
-                
-                # Enhanced filtering
-                # 1. Remove negative values (force should be positive)
                 df = df[df['force_n'] >= 0]
                 
-                # 2. Remove extreme outliers (more than 3 std devs from mean)
+                # Enhanced filtering
                 mean_force = df['force_n'].mean()
                 std_force = df['force_n'].std()
-                if std_force > 0:  # Avoid division by zero
+                if std_force > 0:
                     df = df[df['force_n'] <= mean_force + 3 * std_force]
                 
-                # 3. Remove values that are too high before the main test starts
-                # Find the first significant force value (>1% of max)
                 if not df.empty:
                     max_force = df['force_n'].max()
                     threshold = max_force * 0.01
@@ -403,20 +433,15 @@ with tab2:
                 # Find peak force
                 max_force_n = df['force_n'].max()
                 
-                # Calculate bending strength in N/cm²
-                # Formula: σ = (3 * F * L) / (2 * b * h²)
-                # Convert mm to cm: 1 mm = 0.1 cm
+                # Calculate bending strength
                 L_cm = L * 0.1
                 b_cm = b * 0.1
                 h_cm = h * 0.1
-                
                 bending_strength = (3 * max_force_n * L_cm) / (2 * b_cm * h_cm**2)
                 status = "✅ Pass" if bending_strength >= nominal_strength else "❌ Fail"
                 
                 # Extract part ID and job number from filename
                 try:
-                    # Example filename: 2025_0731_1110221A(1).csv
-                    # Extract date and identifier
                     date_part = filename.split("_")[0] + "_" + filename.split("_")[1]
                     identifier = filename.split("_")[2].split("(")[0]
                     job_no = filename.split("(")[1].split(")")[0] if "(" in filename else "N/A"
@@ -462,12 +487,7 @@ with tab2:
                 ax.legend()
                 ax.grid(True, linestyle='--', alpha=0.7)
                 st.pyplot(fig)
-                
-                # Save plot for Excel
-                img_buffer = BytesIO()
-                plt.savefig(img_buffer, format='png', dpi=300)
                 plt.close(fig)
-                graphs.append((filename, img_buffer))
 
                 if bending_strength < nominal_strength:
                     st.warning("""
@@ -503,92 +523,51 @@ with tab2:
             # Generate combined Excel report
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Get the workbook object
                 workbook = writer.book
                 
-                # ===================================================
-                # ========== Create Professional Front Page ==========
-                # ===================================================
+                # Front Page
                 front_sheet = workbook.add_worksheet('Test Summary')
-                
-                # Define professional formats
                 title_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 18,
-                    'bold': True,
-                    'align': 'center',
-                    'valign': 'vcenter',
-                    'bottom': 6
+                    'font_name': 'Calibri', 'font_size': 18, 'bold': True,
+                    'align': 'center', 'valign': 'vcenter', 'bottom': 6
                 })
-                
                 header_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 12,
-                    'bold': True,
-                    'bg_color': '#003366',
-                    'font_color': 'white',
-                    'border': 1,
-                    'align': 'center',
-                    'valign': 'vcenter'
+                    'font_name': 'Calibri', 'font_size': 12, 'bold': True,
+                    'bg_color': '#003366', 'font_color': 'white',
+                    'border': 1, 'align': 'center', 'valign': 'vcenter'
                 })
-                
                 subheader_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 14,
-                    'bold': True,
-                    'align': 'left'
+                    'font_name': 'Calibri', 'font_size': 14, 'bold': True, 'align': 'left'
                 })
-                
                 info_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 11,
-                    'align': 'left',
-                    'text_wrap': True
+                    'font_name': 'Calibri', 'font_size': 11, 'align': 'left', 'text_wrap': True
                 })
-                
                 parameter_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 11,
-                    'bold': True,
-                    'align': 'left',
-                    'bg_color': '#e6f0f9'
+                    'font_name': 'Calibri', 'font_size': 11, 'bold': True,
+                    'align': 'left', 'bg_color': '#e6f0f9'
                 })
-                
                 value_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 11,
-                    'align': 'left',
-                    'border': 1
+                    'font_name': 'Calibri', 'font_size': 11, 'align': 'left', 'border': 1
                 })
-                
                 number_format = workbook.add_format({
-                    'font_name': 'Calibri',
-                    'font_size': 11,
-                    'num_format': '0.00',
-                    'align': 'left',
-                    'border': 1
+                    'font_name': 'Calibri', 'font_size': 11, 'num_format': '0.00',
+                    'align': 'left', 'border': 1
                 })
                 
-                # Set column widths
-                front_sheet.set_column('A:A', 2)  # Padding
-                front_sheet.set_column('B:B', 25)  # Labels
-                front_sheet.set_column('C:C', 25)  # Values
-                front_sheet.set_column('D:D', 2)  # Padding
+                front_sheet.set_column('A:A', 2)
+                front_sheet.set_column('B:B', 25)
+                front_sheet.set_column('C:C', 25)
+                front_sheet.set_column('D:D', 2)
                 
-                # Add title and company info
                 front_sheet.merge_range('B1:D1', 'Brafe Engineering - Bend Test Report', title_format)
                 front_sheet.merge_range('B3:D3', 'Quality Control Department', info_format)
                 front_sheet.merge_range('B4:D4', f"Report Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", info_format)
-                
-                # Add test parameters section
                 front_sheet.merge_range('B6:D6', 'Test Parameters', subheader_format)
                 
-                # Get operator and test ID from session state
                 operator_name = st.session_state.get("operator_name", "Unknown Operator")
                 test_id = st.session_state.get("test_id", "Unknown Test ID")
-                
-                # Add parameter table
                 test_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                
                 parameters = [
                     ("Test ID", test_id),
                     ("Operator", operator_name),
@@ -600,39 +579,29 @@ with tab2:
                     front_sheet.write(row_idx, 1, param, parameter_format)
                     front_sheet.write(row_idx, 2, value, value_format)
                 
-                # Add test summary section
                 front_sheet.merge_range('B13:D13', 'Test Results Summary', subheader_format)
                 
-                # Add summary table if results exist
                 if results:
-                    # Write headers
                     headers = ["Filename", "Part ID", "Job No", "Strength (N/cm²)", "Status"]
                     for col_idx, header in enumerate(headers, start=1):
                         front_sheet.write(14, col_idx, header, header_format)
                     
-                    # Write data
                     for row_idx, result in enumerate(results, start=15):
                         front_sheet.write(row_idx, 1, result['Filename'], value_format)
                         front_sheet.write(row_idx, 2, result['Part ID'], value_format)
                         front_sheet.write(row_idx, 3, result['Job No'], value_format)
                         front_sheet.write_number(row_idx, 4, result['Bending Strength (N/cm²)'], number_format)
                         
-                        # Apply conditional formatting for status
                         if result['Status'] == "✅ Pass":
                             status_format = workbook.add_format({
-                                'font_color': '#155724',
-                                'bg_color': '#d4edda',
-                                'border': 1
+                                'font_color': '#155724', 'bg_color': '#d4edda', 'border': 1
                             })
                         else:
                             status_format = workbook.add_format({
-                                'font_color': '#721c24',
-                                'bg_color': '#f8d7da',
-                                'border': 1
+                                'font_color': '#721c24', 'bg_color': '#f8d7da', 'border': 1
                             })
                         front_sheet.write(row_idx, 5, result['Status'], status_format)
                     
-                    # Add statistics
                     strengths = [r['Bending Strength (N/cm²)'] for r in results]
                     if strengths:
                         avg_strength = sum(strengths) / len(strengths)
@@ -648,67 +617,49 @@ with tab2:
                         front_sheet.merge_range(f'B{18+len(results)}:C{18+len(results)}', 'Maximum Strength', parameter_format)
                         front_sheet.write_number(17+len(results), 4, max_strength, number_format)
                 
-                # Add footer note
-                note = "Note: Complete test data available in subsequent sheets"
-                front_sheet.merge_range(f'B{20+len(results)}:D{20+len(results)}', note, info_format)
+                front_sheet.merge_range(f'B{20+len(results)}:D{20+len(results)}', "Note: Complete test data available in subsequent sheets", info_format)
                 
-                # ===================================================
-                # ========== Create Breaking Force Sheet =============
-                # ===================================================
+                # Breaking Force Sheet
                 if results:
                     breaking_force_sheet = workbook.add_worksheet('Breaking Force')
-                    
-                    # Create header
                     breaking_force_sheet.merge_range('A1:E1', 'Breaking Force Measurements', title_format)
                     breaking_force_sheet.write_row(2, 0, ['Filename', 'Part ID', 'Job No', 'Max Force (N)', 'Status'], header_format)
                     
-                    # Write data
                     for row_idx, result in enumerate(results, start=3):
                         breaking_force_sheet.write(row_idx, 0, result['Filename'], value_format)
                         breaking_force_sheet.write(row_idx, 1, result['Part ID'], value_format)
                         breaking_force_sheet.write(row_idx, 2, result['Job No'], value_format)
                         breaking_force_sheet.write_number(row_idx, 3, result['Max Force (N)'], number_format)
                         
-                        # Apply conditional formatting for status
                         if result['Status'] == "✅ Pass":
                             status_format = workbook.add_format({
-                                'font_color': '#155724',
-                                'bg_color': '#d4edda'
+                                'font_color': '#155724', 'bg_color': '#d4edda'
                             })
                         else:
                             status_format = workbook.add_format({
-                                'font_color': '#721c24',
-                                'bg_color': '#f8d7da'
+                                'font_color': '#721c24', 'bg_color': '#f8d7da'
                             })
                         breaking_force_sheet.write(row_idx, 4, result['Status'], status_format)
                     
-                    # Format columns
                     breaking_force_sheet.set_column('A:A', 30)
                     breaking_force_sheet.set_column('B:B', 20)
                     breaking_force_sheet.set_column('C:C', 15)
                     breaking_force_sheet.set_column('D:D', 15)
                     breaking_force_sheet.set_column('E:E', 10)
                 
-                # ===================================================
-                # ========== Create Sheets for Each Test ============
-                # ===================================================
+                # Sheets for Each Test
                 if results and dfs:
                     for idx, (filename, df) in enumerate(dfs):
-                        # Create base name for sheets
                         base_name = re.sub(r'[\[\]:*?/\\]', '_', filename)[:20]
                         
-                        # Create parameter sheet
+                        # Parameter sheet
                         param_sheet_name = base_name + "_Params"
                         param_sheet = workbook.add_worksheet(param_sheet_name[:31])
-                        
-                        # Add header
                         param_sheet.merge_range('A1:C1', f'Test Parameters: {filename}', title_format)
                         param_sheet.write_row(2, 0, ['Parameter', 'Value', 'Status'], header_format)
                         
-                        # Get specific values for this file
                         file_result = next((r for r in results if r['Filename'] == filename), {})
                         
-                        # Prepare parameters
                         test_params = [
                             ("Test ID", test_id, ""),
                             ("Operator", operator_name, ""),
@@ -723,43 +674,31 @@ with tab2:
                             ("Status", "", file_result.get('Status', 'N/A'))
                         ]
                         
-                        # Write parameters
                         for row_idx, (param, value, status) in enumerate(test_params, start=3):
                             param_sheet.write(row_idx, 0, param, parameter_format)
                             param_sheet.write(row_idx, 1, value, value_format)
                             
-                            # Apply status formatting
                             if status == "✅ Pass":
                                 status_format = workbook.add_format({
-                                    'font_color': '#155724',
-                                    'bg_color': '#d4edda',
-                                    'border': 1
+                                    'font_color': '#155724', 'bg_color': '#d4edda', 'border': 1
                                 })
                             else:
                                 status_format = workbook.add_format({
-                                    'font_color': '#721c24',
-                                    'bg_color': '#f8d7da',
-                                    'border': 1
+                                    'font_color': '#721c24', 'bg_color': '#f8d7da', 'border': 1
                                 })
                             param_sheet.write(row_idx, 2, status, status_format)
                         
-                        # Set column widths
                         param_sheet.set_column('A:A', 25)
                         param_sheet.set_column('B:B', 20)
                         param_sheet.set_column('C:C', 15)
                         
-                        # Create raw data sheet
+                        # Raw data sheet
                         data_sheet_name = base_name + "_Data"
                         raw_sheet = workbook.add_worksheet(data_sheet_name[:31])
-                        
-                        # Add header
                         raw_sheet.merge_range('A1:Z1', f'Raw Test Data: {filename}', title_format)
-                        
-                        # Write raw data headers
                         headers = df.columns.tolist()
                         raw_sheet.write_row(2, 0, headers, header_format)
                         
-                        # Write raw data
                         for row_idx, row in enumerate(df.values):
                             for col_idx, value in enumerate(row):
                                 if isinstance(value, float):
@@ -767,10 +706,8 @@ with tab2:
                                 else:
                                     raw_sheet.write_string(row_idx + 3, col_idx, str(value), value_format)
                         
-                        # Freeze header row
                         raw_sheet.freeze_panes(3, 0)
                         
-                        # Add chart
                         if not df.empty:
                             chart = workbook.add_chart({'type': 'line'})
                             chart.add_series({
@@ -779,11 +716,9 @@ with tab2:
                                 'line': {'color': '#003366', 'width': 1.5}
                             })
                             
-                            # Find max force value and position
                             max_force = df['force_n'].max()
-                            max_index = df['force_n'].idxmax() + 3  # +3 for header offset
+                            max_index = df['force_n'].idxmax() + 3
                             
-                            # Add max force marker
                             chart.add_series({
                                 'values': [data_sheet_name, max_index, 5, max_index, 5],
                                 'name': 'Max Force',
@@ -796,21 +731,16 @@ with tab2:
                             chart.set_y_axis({'name': 'Force (N)'})
                             chart.set_legend({'position': 'top'})
                             
-                            # Insert chart below data
                             raw_sheet.insert_chart(f'G{len(df) + 10}', chart)
 
-            # Only show download button if we have results
-            if results:
-                st.download_button(
-                    label="📥 Download Excel Report",
-                    data=output.getvalue(),
-                    file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Download comprehensive test report in Excel format"
-                )
-            else:
-                st.warning("No test results available to generate report")
-         
+            st.download_button(
+                label="📥 Download Excel Report",
+                data=output.getvalue(),
+                file_name=f"Brafe_BendTest_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Download comprehensive test report in Excel format"
+            )
+
 with tab3:
     st.header("Loss on Ignition (LOI) Analysis")
     st.caption("Calculate binder content according to section 3.5 of Quality Control Manual")
@@ -819,10 +749,6 @@ with tab3:
                       ["Bunsen Burner (Section 3.5.1)", "Oven (Section 3.5.2)"],
                       index=0,
                       horizontal=True)
-    
-    # Initialize variables to store calculation results
-    if 'loi_results' not in st.session_state:
-        st.session_state.loi_results = None
     
     with st.form("loi_calculation"):
         st.subheader("Enter Measurement Values")
@@ -849,12 +775,9 @@ with tab3:
         
         if submitted:
             try:
-                # The manual's formula, which uses absolute values of tared bowl weights,
-                # is not standard but is implemented as specified.
                 delta_m = (abs(t2) - abs(t1)) - w1
                 loi = (abs(delta_m) / w1) * 100
                 
-                # Store results in session state
                 st.session_state.loi_results = {
                     'delta_m': abs(delta_m),
                     'loi': loi,
@@ -892,14 +815,11 @@ with tab3:
     
     # Download button outside the form
     if st.session_state.loi_results:
-        # Get operator and test ID from session state
         operator_name = st.session_state.get("operator_name", "Unknown Operator")
         test_id = st.session_state.get("test_id", "Unknown Test ID")
         
-        # Generate Excel report in Brafe template format
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            # Create summary sheet
             summary_df = pd.DataFrame({
                 'Parameter': ['Test Date', 'Operator', 'Test ID', 
                               'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
@@ -917,11 +837,9 @@ with tab3:
             })
             summary_df.to_excel(writer, sheet_name='Test Summary', index=False, startrow=1)
             
-            # Formatting
             workbook = writer.book
             summary_sheet = writer.sheets['Test Summary']
             
-            # Formatting
             header_format = workbook.add_format({
                 'bold': True,
                 'bg_color': '#003366',
@@ -937,11 +855,9 @@ with tab3:
                 'font_color': '#721c24'
             })
             
-            # Apply header formatting
             for col_num, value in enumerate(summary_df.columns.values):
                 summary_sheet.write(0, col_num, value, header_format)
             
-            # Apply conditional formatting to status
             status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
             if st.session_state.loi_results['status'] == "✅ Pass":
                 summary_sheet.conditional_format(f'B{status_row+1}', {
@@ -958,7 +874,6 @@ with tab3:
                     'format': fail_format
                 })
             
-            # Set column widths
             summary_sheet.set_column('A:A', 25)
             summary_sheet.set_column('B:B', 20)
         
