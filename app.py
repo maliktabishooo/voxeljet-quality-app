@@ -643,10 +643,10 @@ with tab2:
                         front_sheet.write_number(15+len(results), 4, avg_strength, number_format)
                         
                         front_sheet.merge_range(f'B{17+len(results)}:C{17+len(results)}', 'Minimum Strength', parameter_format)
-                        front_sheet.write_number(17+len(results), 4, min_strength, number_format)
+                        front_sheet.write_number(16+len(results), 4, min_strength, number_format)
                         
                         front_sheet.merge_range(f'B{18+len(results)}:C{18+len(results)}', 'Maximum Strength', parameter_format)
-                        front_sheet.write_number(18+len(results), 4, max_strength, number_format)
+                        front_sheet.write_number(17+len(results), 4, max_strength, number_format)
                 
                 # Add footer note
                 note = "Note: Complete test data available in subsequent sheets"
