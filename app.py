@@ -593,8 +593,7 @@ with tab2:
                     ("Test ID", test_id),
                     ("Operator", operator_name),
                     ("Test Date", test_date),
-                    ("Nominal Strength", f"{nominal_strength} N/cm²"),
-                    ("Tolerance", "±0.45 mm")
+                    ("Nominal Strength", f"{nominal_strength} N/cm²")
                 ]
                 
                 for row_idx, (param, value) in enumerate(parameters, start=7):
@@ -641,7 +640,7 @@ with tab2:
                         max_strength = max(strengths)
                         
                         front_sheet.merge_range(f'B{16+len(results)}:C{16+len(results)}', 'Average Strength', parameter_format)
-                        front_sheet.write_number(16+len(results), 4, avg_strength, number_format)
+                        front_sheet.write_number(15+len(results), 4, avg_strength, number_format)
                         
                         front_sheet.merge_range(f'B{17+len(results)}:C{17+len(results)}', 'Minimum Strength', parameter_format)
                         front_sheet.write_number(17+len(results), 4, min_strength, number_format)
