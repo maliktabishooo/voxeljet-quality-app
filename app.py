@@ -488,49 +488,62 @@ with tab2:
                 # Get the workbook object
                 workbook = writer.book
                 
+                # Define professional formats
+                title_format = workbook.add_format({
+                    'font_name': 'Calibri',
+                    'font_size': 16,
+                    'bold': True,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'border': 1
+                })
+                
+                header_format = workbook.add_format({
+                    'font_name': 'Calibri',
+                    'font_size': 11,
+                    'bold': True,
+                    'bg_color': '#003366',
+                    'font_color': 'white',
+                    'border': 1,
+                    'align': 'center'
+                })
+                
+                value_format = workbook.add_format({
+                    'font_name': 'Calibri',
+                    'font_size': 11,
+                    'border': 1,
+                    'align': 'left'
+                })
+                
+                number_format = workbook.add_format({
+                    'font_name': 'Calibri',
+                    'font_size': 11,
+                    'border': 1,
+                    'num_format': '0.00',
+                    'align': 'left'
+                })
+                
                 # ========== Create Front Page ==========
                 front_sheet = workbook.add_worksheet('Test Parameters')
                 
-                # Add Brafe logo if available
-                logo_height = 60
+                # Add Brafe logo in merged cells B1:C2
+                logo_height = 50  # Height per row
                 if brafe_logo:
                     try:
                         # Save logo to BytesIO buffer
                         logo_buffer = BytesIO()
                         brafe_logo.save(logo_buffer, format='PNG')
                         logo_buffer.seek(0)  # Reset buffer position to start
-                        # Insert logo into Excel using BytesIO with adjusted scaling
-                        front_sheet.insert_image('B2', 'brafe_logo.png', {
+                        # Merge cells B1:C2 for logo
+                        front_sheet.merge_range('B1:C2', '')
+                        # Insert logo into merged cells B1:C2
+                        front_sheet.insert_image('B1', 'brafe_logo.png', {
                             'image_data': logo_buffer,
-                            'x_scale': 0.3,
-                            'y_scale': 0.3,
-                            'x_offset': 10,
-                            'y_offset': 10
+                            'x_scale': 0.4,
+                            'y_scale': 0.4
                         })
-                        logo_height = 60  # Set row height for logo
                     except Exception as e:
                         st.warning(f"Could not add logo to Excel: {str(e)}")
-                
-                # Formatting
-                title_format = workbook.add_format({
-                    'bold': True,
-                    'font_size': 16,
-                    'align': 'center',
-                    'valign': 'vcenter'
-                })
-                
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'bg_color': '#003366',
-                    'font_color': 'white',
-                    'border': 1,
-                    'align': 'left'
-                })
-                
-                value_format = workbook.add_format({
-                    'border': 1,
-                    'align': 'left'
-                })
                 
                 # Set column widths
                 front_sheet.set_column('A:A', 2)  # Padding
@@ -538,8 +551,8 @@ with tab2:
                 front_sheet.set_column('C:C', 25)  # Value column
                 
                 # Set row heights
-                front_sheet.set_row(0, 5)  # Top padding
-                front_sheet.set_row(1, logo_height)  # Logo row
+                front_sheet.set_row(0, logo_height)  # Row 1 for logo
+                front_sheet.set_row(1, logo_height)  # Row 2 for logo
                 front_sheet.set_row(2, 5)  # Spacer
                 front_sheet.set_row(3, 20)  # Title row
                 
@@ -588,7 +601,10 @@ with tab2:
                 
                 for i, (param, value) in enumerate(test_info, start=6):
                     front_sheet.write_string(i, 1, param, header_format)
-                    front_sheet.write_string(i, 2, value, value_format)
+                    if param in ["Max Force (N)", "Bending Strength (N/cm²)"]:
+                        front_sheet.write_string(i, 2, value, number_format)
+                    else:
+                        front_sheet.write_string(i, 2, value, value_format)
                 
                 # Add summary table title
                 front_sheet.write_string(18, 1, "Summary of All Tests", title_format)
@@ -610,7 +626,7 @@ with tab2:
                                     summary_start_row + row_idx + 1, 
                                     col_idx + 1, 
                                     value,
-                                    value_format
+                                    number_format
                                 )
                             else:
                                 front_sheet.write_string(
@@ -620,22 +636,23 @@ with tab2:
                                     value_format
                                 )
                 
-                # ========== Create Summary Sheet ==========
-                summary_sheet = workbook.add_worksheet('Summary')
+                # ========== Create Breaking Force Sheet ==========
+                breaking_force_sheet = workbook.add_worksheet('Breaking Force')
                 if results:
-                    summary_df.to_excel(writer, sheet_name='Summary', index=False, startrow=1)
+                    # Create a simplified DataFrame for Breaking Force sheet
+                    breaking_force_df = pd.DataFrame([
+                        {'Filename': r['Filename'], 'Max Force (N)': r['Max Force (N)']}
+                        for r in results
+                    ])
+                    breaking_force_df.to_excel(writer, sheet_name='Breaking Force', index=False, startrow=1)
                     
-                    # Format summary sheet
-                    summary_header_format = workbook.add_format({
-                        'bold': True,
-                        'bg_color': '#003366',
-                        'font_color': 'white',
-                        'border': 1
-                    })
+                    # Format Breaking Force sheet
+                    for col_num, value in enumerate(breaking_force_df.columns):
+                        breaking_force_sheet.write(1, col_num, value, header_format)
                     
-                    # Apply header formatting
-                    for col_num, value in enumerate(summary_df.columns):
-                        summary_sheet.write(1, col_num, value, summary_header_format)
+                    # Apply number format to Max Force column
+                    breaking_force_sheet.set_column('B:B', 20, number_format)
+                    breaking_force_sheet.set_column('A:A', 25, value_format)
                 
                 # ========== Create Sheets for Each Test ==========
                 if results and dfs:
@@ -678,7 +695,10 @@ with tab2:
                         
                         for row_idx, (param, value) in enumerate(test_params, start=1):
                             param_sheet.write_string(row_idx, 0, param, header_format)
-                            param_sheet.write_string(row_idx, 1, value, value_format)
+                            if param in ["Max Force (N)", "Bending Strength (N/cm²)"]:
+                                param_sheet.write_string(row_idx, 1, value, number_format)
+                            else:
+                                param_sheet.write_string(row_idx, 1, value, value_format)
                         
                         # Create raw data sheet
                         data_sheet_name = base_name + "_Data"
@@ -692,7 +712,10 @@ with tab2:
                         # Write raw data
                         for row_idx, row in enumerate(df.values):
                             for col_idx, value in enumerate(row):
-                                raw_sheet.write(row_idx + 1, col_idx, value)
+                                if isinstance(value, float):
+                                    raw_sheet.write_number(row_idx + 1, col_idx, value, number_format)
+                                else:
+                                    raw_sheet.write_string(row_idx + 1, col_idx, str(value), value_format)
 
             # Only show download button if we have results
             if results:
@@ -775,7 +798,7 @@ with tab3:
                                   method, t1, w1, t2,
                                   abs(delta_m), loi, status]
                     })
-                    summary_df.to_excel(writer, sheet_name='Test Summary', index=False)
+                    summary_df.to_excel(writer, sheet_name='Test Summary', index=False, startrow=1)
                     
                     # Formatting
                     workbook = writer.book
