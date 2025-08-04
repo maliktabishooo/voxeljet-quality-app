@@ -820,6 +820,10 @@ with tab3:
                       index=0,
                       horizontal=True)
     
+    # Initialize variables to store calculation results
+    if 'loi_results' not in st.session_state:
+        st.session_state.loi_results = None
+    
     with st.form("loi_calculation"):
         st.subheader("Enter Measurement Values")
         col1, col2, col3 = st.columns(3)
@@ -850,6 +854,16 @@ with tab3:
                 delta_m = (abs(t2) - abs(t1)) - w1
                 loi = (abs(delta_m) / w1) * 100
                 
+                # Store results in session state
+                st.session_state.loi_results = {
+                    'delta_m': abs(delta_m),
+                    'loi': loi,
+                    'status': "✅ Pass" if 0.5 <= loi <= 2.5 else "❌ Fail",
+                    't1': t1,
+                    'w1': w1,
+                    't2': t2
+                }
+                
                 st.divider()
                 st.subheader("Results")
                 
@@ -868,80 +882,6 @@ with tab3:
                 - > 2.5%: Excessive binder
                 """)
                 
-                # Get operator and test ID from session state
-                operator_name = st.session_state.get("operator_name", "Unknown Operator")
-                test_id = st.session_state.get("test_id", "Unknown Test ID")
-                
-                # Generate Excel report in Brafe template format
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    # Create summary sheet
-                    summary_df = pd.DataFrame({
-                        'Parameter': ['Test Date', 'Operator', 'Test ID', 
-                                      'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
-                                      'Mass Loss (g)', 'LOI (%)', 'Status'],
-                        'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 
-                                  operator_name, 
-                                  test_id,
-                                  method, t1, w1, t2,
-                                  abs(delta_m), loi, status]
-                    })
-                    summary_df.to_excel(writer, sheet_name='Test Summary', index=False, startrow=1)
-                    
-                    # Formatting
-                    workbook = writer.book
-                    summary_sheet = writer.sheets['Test Summary']
-                    
-                    # Formatting
-                    header_format = workbook.add_format({
-                        'bold': True,
-                        'bg_color': '#003366',
-                        'font_color': 'white',
-                        'border': 1
-                    })
-                    pass_format = workbook.add_format({
-                        'bg_color': '#d4edda',
-                        'font_color': '#155724'
-                    })
-                    fail_format = workbook.add_format({
-                        'bg_color': '#f8d7da',
-                        'font_color': '#721c24'
-                    })
-                    
-                    # Apply header formatting
-                    for col_num, value in enumerate(summary_df.columns.values):
-                        summary_sheet.write(0, col_num, value, header_format)
-                    
-                    # Apply conditional formatting to status
-                    status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
-                    if status == "✅ Pass":
-                        summary_sheet.conditional_format(f'B{status_row+1}', {
-                            'type': 'cell',
-                            'criteria': '==',
-                            'value': '"✅ Pass"',
-                            'format': pass_format
-                        })
-                    else:
-                        summary_sheet.conditional_format(f'B{status_row+1}', {
-                            'type': 'cell',
-                            'criteria': '==',
-                            'value': '"❌ Fail"',
-                            'format': fail_format
-                        })
-                    
-                    # Set column widths
-                    summary_sheet.set_column('A:A', 25)
-                    summary_sheet.set_column('B:B', 20)
-                
-                # Download button
-                st.download_button(
-                    label="📥 Download Excel Report",
-                    data=output.getvalue(),
-                    file_name=f"Brafe_LOI_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Download LOI test report in Excel format"
-                )
-                
                 if "Bunsen" in method:
                     st.caption("Bunsen Burner Method Notes:\n- Burn until sand turns white\n- Stir every minute\n- Cool for 20 min before weighing")
                 else:
@@ -949,6 +889,86 @@ with tab3:
                     
             except Exception as e:
                 st.error(f"Calculation error: {str(e)}")
+    
+    # Download button outside the form
+    if st.session_state.loi_results:
+        # Get operator and test ID from session state
+        operator_name = st.session_state.get("operator_name", "Unknown Operator")
+        test_id = st.session_state.get("test_id", "Unknown Test ID")
+        
+        # Generate Excel report in Brafe template format
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Create summary sheet
+            summary_df = pd.DataFrame({
+                'Parameter': ['Test Date', 'Operator', 'Test ID', 
+                              'Method', 'T1 (g)', 'W1 (g)', 'T2 (g)',
+                              'Mass Loss (g)', 'LOI (%)', 'Status'],
+                'Value': [datetime.datetime.now().strftime('%Y-%m-%d'), 
+                          operator_name, 
+                          test_id,
+                          method, 
+                          st.session_state.loi_results['t1'], 
+                          st.session_state.loi_results['w1'], 
+                          st.session_state.loi_results['t2'],
+                          st.session_state.loi_results['delta_m'], 
+                          st.session_state.loi_results['loi'], 
+                          st.session_state.loi_results['status']]
+            })
+            summary_df.to_excel(writer, sheet_name='Test Summary', index=False, startrow=1)
+            
+            # Formatting
+            workbook = writer.book
+            summary_sheet = writer.sheets['Test Summary']
+            
+            # Formatting
+            header_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#003366',
+                'font_color': 'white',
+                'border': 1
+            })
+            pass_format = workbook.add_format({
+                'bg_color': '#d4edda',
+                'font_color': '#155724'
+            })
+            fail_format = workbook.add_format({
+                'bg_color': '#f8d7da',
+                'font_color': '#721c24'
+            })
+            
+            # Apply header formatting
+            for col_num, value in enumerate(summary_df.columns.values):
+                summary_sheet.write(0, col_num, value, header_format)
+            
+            # Apply conditional formatting to status
+            status_row = summary_df.index[summary_df['Parameter'] == 'Status'].tolist()[0] + 1
+            if st.session_state.loi_results['status'] == "✅ Pass":
+                summary_sheet.conditional_format(f'B{status_row+1}', {
+                    'type': 'cell',
+                    'criteria': '==',
+                    'value': '"✅ Pass"',
+                    'format': pass_format
+                })
+            else:
+                summary_sheet.conditional_format(f'B{status_row+1}', {
+                    'type': 'cell',
+                    'criteria': '==',
+                    'value': '"❌ Fail"',
+                    'format': fail_format
+                })
+            
+            # Set column widths
+            summary_sheet.set_column('A:A', 25)
+            summary_sheet.set_column('B:B', 20)
+        
+        st.download_button(
+            label="📥 Download Excel Report",
+            data=output.getvalue(),
+            file_name=f"Brafe_LOI_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Download LOI test report in Excel format"
+        )
     
     st.divider()
     st.subheader("LOI Formula Reference")
