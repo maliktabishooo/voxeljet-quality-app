@@ -115,16 +115,16 @@ with st.sidebar:
     # Test Information
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.subheader("Test Information")
-    st.session_state.operator_name = st.text_input("Operator Name", "John Doe", key="global_operator")
+    st.session_state.operator_name = st.text_input("Operator Name", "Your Name", key="global_operator")
     st.session_state.test_id = st.text_input("Test ID", "TEST-001", key="global_test_id")
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Engineering Resources
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.header("Brafe Engineering Resources")
-    st.markdown("[Quality Control Manual](https://www.brafeengineering.com/support/)")
-    st.markdown("[Technical Support](mailto:support@brafeengineering.com)")
-    st.markdown("Hotline: +44 123 456 7890")
+    st.markdown("[Quality Control - LOI and 3 Point Bend Test methods]")
+    st.markdown("[Technical Support](mailto:info@brafe.com)")
+    st.markdown("Hotline: +44 (0) 1394 380 000")
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Test Specifications
