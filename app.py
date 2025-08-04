@@ -525,28 +525,6 @@ with tab2:
                 
                 # ========== Create Front Page ==========
                 front_sheet = workbook.add_worksheet('Test Parameters')
-                
-                # Add Brafe logo in merged cells B1:C2 with exact size
-                if brafe_logo:
-                    try:
-                        # Save logo to BytesIO buffer
-                        logo_buffer = BytesIO()
-                        brafe_logo.save(logo_buffer, format='PNG')
-                        logo_buffer.seek(0)  # Reset buffer position to start
-                        # Merge cells B1:C2 for logo
-                        front_sheet.merge_range('B1:C2', '')
-                        # Insert logo into merged cells B1:C2
-                        # Set exact dimensions: width=9.16 cm (259.49 px), height=2.17 cm (61.42 px)
-                        front_sheet.insert_image('B1', 'brafe_logo.png', {
-                            'image_data': logo_buffer,
-                            'x_scale': 1,
-                            'y_scale': 1,
-                            'width': 9.16,
-                            'height': 2.17
-                        })
-                    except Exception as e:
-                        st.warning(f"Could not add logo to Excel: {str(e)}")
-                
                 # Set column widths
                 front_sheet.set_column('A:A', 2)  # Padding
                 front_sheet.set_column('B:B', 20)  # Second column (B)
@@ -563,16 +541,7 @@ with tab2:
                 
                 # Add test parameters table
                 test_date = datetime.datetime.now().strftime('%Y-%m-%d')
-                
-                # Initialize fallback values
-                part_id = 'N/A'
-                job_no = 'N/A'
-                L = 172.0
-                b = 22.4
-                h = 22.4
-                max_force_n = 0
-                bending_strength = 0
-                status = 'N/A'
+
                 
                 # Get values from results if available
                 if results:
